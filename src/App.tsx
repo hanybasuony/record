@@ -43,6 +43,7 @@ import {
 import { PrintableReceiptSheet } from './components/PrintableReceiptSheet';
 import { exportReportToPdf } from './utils/exportPdf';
 import { exportReportToDocx } from './utils/exportDocx';
+import { DEFAULT_DATABASE } from './data/defaultDatabase';
 
 const LOCAL_STORAGE_KEY = 'desouk_water_custody_db_v1';
 
@@ -151,12 +152,40 @@ function createEmptyReport(
 }
 
 export default function App() {
-  const [db, setDb] = useState<DatabaseSchema | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [db, setDb] = useState<DatabaseSchema>(() => {
+    try {
+      const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached) as DatabaseSchema;
+        if (parsed && Array.isArray(parsed.reports)) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_DATABASE;
+  });
+
+  const [currentReport, setCurrentReport] = useState<CustodyReport>(() => {
+    try {
+      const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached) as DatabaseSchema;
+        if (parsed && Array.isArray(parsed.reports) && parsed.reports.length > 0) {
+          return parsed.reports[0];
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_DATABASE.reports[0] || createEmptyReport('2026/101');
+  });
+
+  const [loading, setLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<
     'editor' | 'archive' | 'recipients' | 'committees' | 'settings'
   >('editor');
-  const [currentReport, setCurrentReport] = useState<CustodyReport | null>(null);
   const [autoSaveToDirectory, setAutoSaveToDirectory] = useState<boolean>(true);
   const [saveBanner, setSaveBanner] = useState<string | null>(null);
   const [editorViewMode, setEditorViewMode] = useState<'split' | 'form' | 'preview'>('split');
@@ -225,49 +254,35 @@ export default function App() {
     }, 4000);
   };
 
-  // Load Database on Mount
+  // Load Database on Mount (try to sync with server if available, otherwise offline/Vercel ready)
   useEffect(() => {
+    let isMounted = true;
     async function fetchDatabase() {
       try {
         const res = await fetch('/api/db');
         if (!res.ok) throw new Error('Failed to fetch from server');
         const data = (await res.json()) as DatabaseSchema;
-        setDb(data);
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
-        if (data.reports.length > 0) {
-          setCurrentReport(data.reports[0]);
-        } else {
-          setCurrentReport(
-            createEmptyReport(
-              '2026/101',
-              data.committeePresets[0],
-              data.settings.defaultReportTitle,
-              data.settings.defaultApproverTitle,
-              data.settings.defaultApproverName
-            )
-          );
+        if (isMounted && data && Array.isArray(data.reports)) {
+          setDb(data);
+          try {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+          } catch {
+            // ignore
+          }
+          if (data.reports.length > 0) {
+            setCurrentReport(data.reports[0]);
+          }
         }
       } catch {
-        const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
-        if (cached) {
-          const parsed = JSON.parse(cached) as DatabaseSchema;
-          setDb(parsed);
-          setCurrentReport(
-            parsed.reports[0] ||
-              createEmptyReport(
-                '2026/101',
-                parsed.committeePresets[0],
-                parsed.settings.defaultReportTitle,
-                parsed.settings.defaultApproverTitle,
-                parsed.settings.defaultApproverName
-              )
-          );
-        }
+        // Running on Vercel static hosting or offline: already initialized with DEFAULT_DATABASE or localStorage!
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     }
     fetchDatabase();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const syncDatabase = async (updatedDb: DatabaseSchema, toastMessage?: string) => {
@@ -695,17 +710,8 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  if (loading || !db || !currentReport) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-          <div className="h-6 bg-slate-200 rounded w-3/4 animate-pulse"></div>
-          <div className="h-4 bg-slate-100 rounded w-1/2 animate-pulse"></div>
-          <div className="h-32 bg-slate-100 rounded animate-pulse"></div>
-        </div>
-      </div>
-    );
-  }
+  const activeDb = db || DEFAULT_DATABASE;
+  const activeReport = currentReport || activeDb.reports[0] || createEmptyReport('2026/101');
 
   return (
     <div dir="rtl" className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
