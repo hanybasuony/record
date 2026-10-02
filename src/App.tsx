@@ -24,6 +24,7 @@ import {
   X,
   Loader2,
   Share2,
+  ArrowLeftRight,
 } from 'lucide-react';
 import {
   DatabaseSchema,
@@ -84,7 +85,8 @@ function createEmptyReport(
   defaultPreset?: CommitteePreset,
   defaultTitle = 'محضر استلام',
   defaultApproverTitle = 'مدير عام المنطقة',
-  defaultApproverName = ''
+  defaultApproverName = '',
+  reportType: 'receipt' | 'transfer' = 'receipt'
 ): CustodyReport {
   const today = '2026-10-02';
   const defaultMembers: CommitteeMemberEntry[] =
@@ -120,7 +122,8 @@ function createEmptyReport(
   return {
     id: `rep-${Date.now()}`,
     reportNumber: nextNumber,
-    reportTitle: defaultTitle,
+    reportTitle: reportType === 'transfer' ? 'إذن مناقلة عهدة' : defaultTitle,
+    reportType,
     dayName: getArabicDayName(today) || 'الجمعة',
     meetingDate: today,
     issueDate: today,
@@ -135,15 +138,23 @@ function createEmptyReport(
         notes: 'جديد وصالح للعمل',
       },
     ],
+    // الطرف المستلم
     recipientName: '',
     recipientJobTitle: '',
     recipientEmployeeCode: '',
     recipientNationalId: '',
     departmentName: '',
+    // الطرف المسلّم (للمناقلة)
+    delivererName: '',
+    delivererJobTitle: '',
+    delivererDepartmentName: '',
+    delivererEmployeeCode: '',
+    delivererNationalId: '',
+    transferReason: reportType === 'transfer' ? 'إعادة توزيع عهدة ومهمات' : '',
     approverTitle: defaultApproverTitle,
     approverName: defaultApproverName,
     status: 'معتمد',
-    custodyType: 'عهدة شخصية مستديمة',
+    custodyType: reportType === 'transfer' ? 'مهمات تشغيل وصيانة' : 'عهدة شخصية مستديمة',
     signatureTableRoleDisplay: 'jobTitle',
     generalNotes: '',
     createdAt: new Date().toISOString(),
@@ -183,6 +194,7 @@ export default function App() {
   });
 
   const [loading, setLoading] = useState<boolean>(false);
+  const [printFontSize, setPrintFontSize] = useState<'compact' | 'standard' | 'spacious'>('compact');
   const [activeTab, setActiveTab] = useState<
     'editor' | 'archive' | 'recipients' | 'committees' | 'settings'
   >('editor');
@@ -200,11 +212,14 @@ export default function App() {
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterReportType, setFilterReportType] = useState<'all' | 'receipt' | 'transfer'>('all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Flexible Combobox dropdown visibility states
   const [showRecipientDropdown, setShowRecipientDropdown] = useState(false);
+  const [showDelivererDropdown, setShowDelivererDropdown] = useState(false);
   const [showDeptDropdown, setShowDeptDropdown] = useState(false);
+  const [showDelivererDeptDropdown, setShowDelivererDeptDropdown] = useState(false);
   const [activeCommitteeDropdownIndex, setActiveCommitteeDropdownIndex] = useState<number | null>(
     null
   );
@@ -376,20 +391,25 @@ export default function App() {
     }
   };
 
-  const handleCreateNewReport = () => {
+  const handleCreateNewReport = (reportType: 'receipt' | 'transfer' = 'receipt') => {
     if (!db) return;
     const nextSeq = 101 + db.reports.length;
     const nextNumber = `2026/${nextSeq}`;
     const fresh = createEmptyReport(
       nextNumber,
       db.committeePresets[0],
-      db.settings.defaultReportTitle,
+      reportType === 'transfer' ? 'إذن مناقلة عهدة' : db.settings.defaultReportTitle,
       db.settings.defaultApproverTitle,
-      db.settings.defaultApproverName
+      db.settings.defaultApproverName,
+      reportType
     );
     setCurrentReport(fresh);
     setActiveTab('editor');
-    showToast(`تم إنشاء نموذج محضر استلام جديد رقم (${nextNumber})`);
+    showToast(
+      reportType === 'transfer'
+        ? `تم إنشاء إذن مناقلة عهدة جديد رقم (${nextNumber})`
+        : `تم إنشاء نموذج محضر استلام جديد رقم (${nextNumber})`
+    );
   };
 
   const handleDuplicateReport = (rep: CustodyReport) => {
@@ -405,7 +425,25 @@ export default function App() {
     };
     setCurrentReport(copy);
     setActiveTab('editor');
-    showToast(`تم نسخ بيانات المحضر إلى محضر جديد رقم (${copy.reportNumber})`);
+    showToast(`تم نسخ بيانات المحضر إلى نموذج جديد رقم (${copy.reportNumber})`);
+  };
+
+  const handleSwapDelivererAndRecipient = () => {
+    if (!currentReport) return;
+    setCurrentReport({
+      ...currentReport,
+      delivererName: currentReport.recipientName,
+      delivererJobTitle: currentReport.recipientJobTitle,
+      delivererDepartmentName: currentReport.departmentName,
+      delivererEmployeeCode: currentReport.recipientEmployeeCode,
+      delivererNationalId: currentReport.recipientNationalId,
+      recipientName: currentReport.delivererName || '',
+      recipientJobTitle: currentReport.delivererJobTitle || '',
+      departmentName: currentReport.delivererDepartmentName || '',
+      recipientEmployeeCode: currentReport.delivererEmployeeCode || '',
+      recipientNationalId: currentReport.delivererNationalId || '',
+    });
+    showToast('تم تبديل أطراف المناقلة (المسلّم والمستلم) بنجاح');
   };
 
   const handleDeleteReport = async (id: string) => {
@@ -574,6 +612,19 @@ export default function App() {
     );
   }, [db, currentReport?.recipientName]);
 
+  const filteredDeliverers = useMemo(() => {
+    if (!db || !currentReport) return [];
+    const q = (currentReport.delivererName || '').trim().toLowerCase();
+    if (!q) return db.recipients;
+    return db.recipients.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        r.jobTitle.toLowerCase().includes(q) ||
+        r.departmentName.toLowerCase().includes(q) ||
+        r.employeeCode.includes(q)
+    );
+  }, [db, currentReport?.delivererName]);
+
   const filteredDepartments = useMemo(() => {
     if (!db || !currentReport) return [];
     const q = (currentReport.departmentName || '').trim().toLowerCase();
@@ -583,10 +634,40 @@ export default function App() {
     );
   }, [db, currentReport?.departmentName]);
 
+  const filteredDelivererDepartments = useMemo(() => {
+    if (!db || !currentReport) return [];
+    const q = (currentReport.delivererDepartmentName || '').trim().toLowerCase();
+    if (!q) return db.departments;
+    return db.departments.filter(
+      (d) => d.name.toLowerCase().includes(q) || d.code.toLowerCase().includes(q)
+    );
+  }, [db, currentReport?.delivererDepartmentName]);
+
+  const receiptReportsCount = useMemo(() => {
+    if (!db) return 0;
+    return db.reports.filter(
+      (r) => r.reportType !== 'transfer' && (!r.delivererName || !r.delivererName.trim())
+    ).length;
+  }, [db]);
+
+  const transferReportsCount = useMemo(() => {
+    if (!db) return 0;
+    return db.reports.filter(
+      (r) => r.reportType === 'transfer' || Boolean(r.delivererName && r.delivererName.trim())
+    ).length;
+  }, [db]);
+
   // Advanced Filtering for Archive
   const filteredArchiveReports = useMemo(() => {
     if (!db) return [];
     return db.reports.filter((rep) => {
+      // 0. Report Type filter
+      if (filterReportType !== 'all') {
+        const isTransfer =
+          rep.reportType === 'transfer' || Boolean(rep.delivererName && rep.delivererName.trim());
+        if (filterReportType === 'transfer' && !isTransfer) return false;
+        if (filterReportType === 'receipt' && isTransfer) return false;
+      }
       // 1. Recipient filter
       if (filterRecipient !== 'all' && rep.recipientName !== filterRecipient) {
         return false;
@@ -617,13 +698,15 @@ export default function App() {
       if (!q) return true;
 
       const inRecipient = rep.recipientName.toLowerCase().includes(q);
+      const inDeliverer = (rep.delivererName || '').toLowerCase().includes(q);
       const inNumber = rep.reportNumber.toLowerCase().includes(q);
       const inDept = rep.departmentName.toLowerCase().includes(q);
       const inItems = rep.items.some((i) => i.itemName.toLowerCase().includes(q));
       const inCommittee = rep.committeeMembers.some((c) => c.name.toLowerCase().includes(q));
       const inNotes = (rep.generalNotes || '').toLowerCase().includes(q);
+      const inReason = (rep.transferReason || '').toLowerCase().includes(q);
 
-      return inRecipient || inNumber || inDept || inItems || inCommittee || inNotes;
+      return inRecipient || inDeliverer || inNumber || inDept || inItems || inCommittee || inNotes || inReason;
     });
   }, [
     db,
@@ -632,6 +715,7 @@ export default function App() {
     filterCommitteeMember,
     filterDepartment,
     filterStatus,
+    filterReportType,
     filterDateFrom,
     filterDateTo,
   ]);
@@ -642,6 +726,7 @@ export default function App() {
     setFilterCommitteeMember('all');
     setFilterDepartment('all');
     setFilterStatus('all');
+    setFilterReportType('all');
     setFilterDateFrom('');
     setFilterDateTo('');
   };
@@ -794,6 +879,27 @@ export default function App() {
 
         {/* Zone 3: Primary Actions (Export PDF, DOCX, Print) */}
         <div className="flex items-center gap-2">
+          {/* Quick Create Buttons */}
+          <button
+            type="button"
+            onClick={() => handleCreateNewReport('receipt')}
+            className="hidden xl:flex px-3 py-2 text-xs font-bold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-300 rounded-lg transition-colors whitespace-nowrap items-center gap-1.5 shadow-xs"
+            title="إنشاء نموذج محضر استلام عهدة جديد"
+          >
+            <Plus className="w-3.5 h-3.5 text-sky-700" />
+            <span>محضر استلام جديد</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleCreateNewReport('transfer')}
+            className="hidden xl:flex px-3 py-2 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors whitespace-nowrap items-center gap-1.5 shadow-xs"
+            title="إنشاء نموذج إذن مناقيل عهدة جديد (مُسلِّم ومُستلم)"
+          >
+            <Share2 className="w-3.5 h-3.5 text-emerald-200" />
+            <span>إذن مناقيل جديد</span>
+          </button>
+
           {/* Quick PDF Export with jspdf & html2canvas */}
           <button
             type="button"
@@ -956,17 +1062,65 @@ export default function App() {
                 <section className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
                     <h2 className="text-base font-bold text-slate-900">
-                      01. بيانات المحضر والتاريخ
+                      01. نوع النموذج وبيانات المحضر
                     </h2>
                     <span className="text-xs text-slate-500">
                       يرتبط اليوم تلقائياً بالتاريخ المختار
                     </span>
                   </div>
 
+                  {/* Document Type Selector: محضر استلام أم إذن مناقلة */}
+                  <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-extrabold text-[#0a2540]">اختر نوع النموذج المطلوب إعداده:</span>
+                      <span className="text-[11px] text-slate-600">يتم تكييف الحقول والتقرير تلقائياً</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCurrentReport({
+                            ...currentReport,
+                            reportType: 'receipt',
+                            reportTitle: 'محضر استلام',
+                          });
+                        }}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 border ${
+                          currentReport.reportType !== 'transfer'
+                            ? 'bg-[#0a2540] text-white border-[#0a2540] shadow-sm'
+                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <FileText className="w-4 h-4 text-sky-400" />
+                        <span>محضر استلام عهدة (مستلم واحد)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCurrentReport({
+                            ...currentReport,
+                            reportType: 'transfer',
+                            reportTitle: 'إذن مناقلة عهدة',
+                            transferReason: currentReport.transferReason || 'إعادة توزيع عهدة ومهمات تشغيلية',
+                          });
+                        }}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 border ${
+                          currentReport.reportType === 'transfer'
+                            ? 'bg-emerald-800 text-white border-emerald-800 shadow-sm'
+                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Share2 className="w-4 h-4 text-emerald-300" />
+                        <span>إذن مناقلة عهدة (مُسلِّم ومُستلم)</span>
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        رقم المحضر
+                        {currentReport.reportType === 'transfer' ? 'رقم إذن المناقلة' : 'رقم المحضر'}
                       </label>
                       <input
                         type="text"
@@ -1812,17 +1966,54 @@ export default function App() {
                 </div>
 
                 {/* Executive Report Customization Controls Bar */}
-                <div className="bg-white border border-slate-200 rounded-lg p-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <span className="font-bold text-slate-700">عناصر التنسيق الاحترافي:</span>
+                <div className="bg-white border border-slate-200 rounded-lg p-2.5 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                  {/* Font Scale Selector for Corporate standards */}
+                  <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-md border border-slate-300">
+                    <span className="text-[11px] font-bold text-slate-800 px-1">حجم الخط:</span>
+                    <button
+                      type="button"
+                      onClick={() => setPrintFontSize('compact')}
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                        printFontSize === 'compact'
+                          ? 'bg-sky-700 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900 bg-white border border-slate-200'
+                      }`}
+                    >
+                      مصغر للشركات (12px)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrintFontSize('standard')}
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                        printFontSize === 'standard'
+                          ? 'bg-sky-700 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900 bg-white border border-slate-200'
+                      }`}
+                    >
+                      متوسط (13px)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrintFontSize('spacious')}
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                        printFontSize === 'spacious'
+                          ? 'bg-sky-700 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900 bg-white border border-slate-200'
+                      }`}
+                    >
+                      كبير (15px)
+                    </button>
+                  </div>
+
                   <div className="flex flex-wrap items-center gap-3">
                     <label className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 cursor-pointer select-none">
                       <input
                         type="checkbox"
-                        checked={db.settings.showOfficialStamp}
+                        checked={activeDb.settings.showOfficialStamp}
                         onChange={(e) =>
                           syncDatabase({
-                            ...db,
-                            settings: { ...db.settings, showOfficialStamp: e.target.checked },
+                            ...activeDb,
+                            settings: { ...activeDb.settings, showOfficialStamp: e.target.checked },
                           })
                         }
                         className="rounded border-slate-300 text-sky-700"
@@ -1833,11 +2024,11 @@ export default function App() {
                     <label className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 cursor-pointer select-none">
                       <input
                         type="checkbox"
-                        checked={db.settings.showQrCode}
+                        checked={activeDb.settings.showQrCode}
                         onChange={(e) =>
                           syncDatabase({
-                            ...db,
-                            settings: { ...db.settings, showQrCode: e.target.checked },
+                            ...activeDb,
+                            settings: { ...activeDb.settings, showQrCode: e.target.checked },
                           })
                         }
                         className="rounded border-slate-300 text-sky-700"
@@ -1848,11 +2039,11 @@ export default function App() {
                     <label className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 cursor-pointer select-none">
                       <input
                         type="checkbox"
-                        checked={db.settings.showWatermark}
+                        checked={activeDb.settings.showWatermark}
                         onChange={(e) =>
                           syncDatabase({
-                            ...db,
-                            settings: { ...db.settings, showWatermark: e.target.checked },
+                            ...activeDb,
+                            settings: { ...activeDb.settings, showWatermark: e.target.checked },
                           })
                         }
                         className="rounded border-slate-300 text-sky-700"
@@ -1863,12 +2054,12 @@ export default function App() {
                     <label className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 cursor-pointer select-none">
                       <input
                         type="checkbox"
-                        checked={db.settings.frameStyle !== 'executive_single'}
+                        checked={activeDb.settings.frameStyle !== 'executive_single'}
                         onChange={(e) =>
                           syncDatabase({
-                            ...db,
+                            ...activeDb,
                             settings: {
-                              ...db.settings,
+                              ...activeDb.settings,
                               frameStyle: e.target.checked ? 'classic_double' : 'executive_single',
                             },
                           })
@@ -1883,9 +2074,10 @@ export default function App() {
                 <div className="overflow-x-auto pb-6">
                   <PrintableReceiptSheet
                     sheetId="official-receipt-sheet"
-                    report={currentReport}
-                    settings={db.settings}
+                    report={activeReport}
+                    settings={activeDb.settings}
                     showReportNumberBadge={true}
+                    fontSizeScale={printFontSize}
                   />
                 </div>
               </div>
@@ -2993,9 +3185,10 @@ export default function App() {
       <div className="hidden print:block print-only-container">
         <PrintableReceiptSheet
           sheetId="official-receipt-sheet-print"
-          report={currentReport}
-          settings={db.settings}
+          report={activeReport}
+          settings={activeDb.settings}
           showReportNumberBadge={true}
+          fontSizeScale={printFontSize}
         />
       </div>
     </div>

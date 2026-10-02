@@ -9,13 +9,19 @@ export function exportReportToDocx(
     const meetingParts = splitDateParts(report.meetingDate);
     const issueParts = splitDateParts(report.issueDate);
 
+    const isTransfer =
+      report.reportType === 'transfer' ||
+      Boolean(report.delivererName && report.delivererName.trim());
+
     const cleanNum = report.reportNumber
       ? report.reportNumber.replace(/[/\\?%*:|"<>]/g, '_')
       : '2026';
     const recipientName = report.recipientName
       ? `_${report.recipientName.replace(/\s+/g, '_')}`
       : '';
-    const filename = `محضر_استلام_عهدة_${cleanNum}${recipientName}.doc`;
+    const filename = isTransfer
+      ? `إذن_مناقلة_عهدة_${cleanNum}${recipientName}.doc`
+      : `محضر_استلام_عهدة_${cleanNum}${recipientName}.doc`;
 
     const getSignatureRole = (m: CustodyReport['committeeMembers'][number]) => {
       if (report.signatureTableRoleDisplay === 'committeeRole') {
@@ -60,67 +66,67 @@ export function exportReportToDocx(
     }
     body {
       font-family: 'Cairo', 'Amiri', 'Traditional Arabic', 'Arial', sans-serif;
-      font-size: 13pt;
-      line-height: 1.45;
+      font-size: 11pt;
+      line-height: 1.4;
       direction: rtl;
       text-align: right;
       color: #000000;
     }
     .outer-double-frame {
-      border: 3pt double #000000;
-      padding: 16pt;
-      min-height: 920pt;
+      border: 2.5pt double #000000;
+      padding: 12pt;
+      min-height: 890pt;
     }
     table.header-tbl {
       width: 100%;
       border-collapse: collapse;
-      border-bottom: 2pt solid #000000;
-      margin-bottom: 10pt;
+      border-bottom: 1.5pt solid #000000;
+      margin-bottom: 8pt;
     }
     .banner-title {
-      background-color: #404040;
+      background-color: #374151;
       color: #ffffff;
       text-align: center;
-      font-size: 17pt;
+      font-size: 14pt;
       font-weight: bold;
-      padding: 6pt;
-      margin-top: 10pt;
-      margin-bottom: 12pt;
-      border: 1.5pt solid #000000;
+      padding: 4.5pt;
+      margin-top: 8pt;
+      margin-bottom: 10pt;
+      border: 1pt solid #000000;
       letter-spacing: 0.5pt;
     }
     .items-table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 8pt;
-      margin-bottom: 12pt;
-      font-size: 11.5pt;
+      margin-top: 6pt;
+      margin-bottom: 10pt;
+      font-size: 10pt;
     }
     .items-table th {
-      background-color: #404040;
+      background-color: #374151;
       color: #ffffff;
       font-weight: bold;
-      border: 1.5pt solid #000000;
-      padding: 7pt 5pt;
+      border: 1pt solid #000000;
+      padding: 5pt 4pt;
       text-align: center;
     }
     .items-table td {
-      border: 1.5pt solid #000000;
-      padding: 6pt 5pt;
+      border: 1pt solid #000000;
+      padding: 4.5pt 4pt;
       vertical-align: middle;
     }
     .sig-table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 14pt;
-      font-size: 12pt;
+      margin-top: 10pt;
+      font-size: 10.5pt;
     }
     .sig-table th {
-      padding: 5pt;
+      padding: 4pt;
       font-weight: bold;
     }
     .sig-table td {
-      padding: 7pt 5pt;
+      padding: 5pt 4pt;
     }
     .stamp-box {
       border: 2pt dashed #1e40af;
@@ -232,27 +238,55 @@ export function exportReportToDocx(
         تحريرا في: &nbsp; <b>${issueParts.day}</b> / <b>${issueParts.month}</b> / <b>${issueParts.year}</b>
       </p>
 
-      <!-- Recipient Block -->
+      <!-- Recipient / Deliverer Block -->
+      ${
+        report.reportType === 'transfer' || Boolean(report.delivererName && report.delivererName.trim())
+          ? `
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 14pt; border: 1.5pt solid #0a2540;">
+        <tr>
+          <td colspan="2" style="background-color: #f0f7ff; padding: 5pt; font-size: 10pt; font-weight: bold; border-bottom: 1pt solid #0a2540;">
+            إقرار مناقلة عهدة رسمي: أقر أنا الطرف المُسَلِّم بالتنازل ونقل قيد العهدة المبينة أعلاه للمستلم، وأقر أنا الطرف المُسْتَلِم باستلام الأصناف بعاليه كاملة وبحالة جيدة ومطابقة للمواصفات وقيدها عهدة في ذمتي.
+          </td>
+        </tr>
+        <tr>
+          <td style="width: 50%; vertical-align: top; padding: 6pt; border-left: 1pt solid #cbd5e1; font-size: 10.5pt;">
+            <b style="color: #0a2540; font-size: 11pt;">الطرف الأول (المُسَلِّم):</b><br/>
+            اسم المسلّم: <b>${report.delivererName || ''}</b> ${report.delivererEmployeeCode ? `[${report.delivererEmployeeCode}]` : ''}<br/>
+            الوظيفة: ${report.delivererJobTitle || ''}<br/>
+            الإدارة التابعة: <b>${report.delivererDepartmentName || ''}</b><br/>
+            توقيع المسلّم: ............................................
+          </td>
+          <td style="width: 50%; vertical-align: top; padding: 6pt; font-size: 10.5pt;">
+            <b style="color: #0a2540; font-size: 11pt;">الطرف الثاني (المُسْتَلِم):</b><br/>
+            اسم المستلم: <b>${report.recipientName || ''}</b> ${report.recipientEmployeeCode ? `[${report.recipientEmployeeCode}]` : ''}<br/>
+            الوظيفة: ${report.recipientJobTitle || ''}<br/>
+            الإدارة التابعة: <b>${report.departmentName || ''}</b><br/>
+            توقيع المستلم: ............................................
+          </td>
+        </tr>
+      </table>`
+          : `
       <table style="width: 78%; border-collapse: collapse; margin-bottom: 16pt;">
         <tr>
-          <td style="width: 28%; font-weight: bold; font-size: 13pt; padding: 4pt 0;">اسم المستلم /</td>
-          <td style="width: 72%; font-weight: bold; font-size: 13pt; border-bottom: 1pt dotted #000;">
+          <td style="width: 28%; font-weight: bold; font-size: 11pt; padding: 3pt 0;">اسم المستلم /</td>
+          <td style="width: 72%; font-weight: bold; font-size: 11pt; border-bottom: 1pt dotted #000;">
             ${report.recipientName || ''} 
             ${report.recipientJobTitle ? ` (${report.recipientJobTitle})` : ''}
             ${report.recipientEmployeeCode ? ` [كود: ${report.recipientEmployeeCode}]` : ''}
           </td>
         </tr>
         <tr>
-          <td style="font-weight: bold; font-size: 13pt; padding: 4pt 0;">الإدارة التابعة /</td>
-          <td style="font-weight: bold; font-size: 13pt; border-bottom: 1pt dotted #000;">
+          <td style="font-weight: bold; font-size: 11pt; padding: 3pt 0;">الإدارة التابعة /</td>
+          <td style="font-weight: bold; font-size: 11pt; border-bottom: 1pt dotted #000;">
             ${report.departmentName || ''}
           </td>
         </tr>
         <tr>
-          <td style="font-weight: bold; font-size: 13pt; padding: 4pt 0;">توقيع المستلم /</td>
+          <td style="font-weight: bold; font-size: 11pt; padding: 3pt 0;">توقيع المستلم /</td>
           <td style="border-bottom: 1pt dotted #000;">&nbsp;</td>
         </tr>
-      </table>
+      </table>`
+      }
 
       <!-- Committee Signatures Table -->
       <table class="sig-table">

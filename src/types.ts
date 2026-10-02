@@ -21,16 +21,25 @@ export interface CustodyReport {
   id: string;
   reportNumber: string;
   reportTitle: string;
+  reportType?: 'receipt' | 'transfer';
   dayName: string;
   meetingDate: string;
   issueDate: string;
   committeeMembers: CommitteeMemberEntry[];
   items: CustodyItem[];
+  // الطرف المستلم (Receiver)
   recipientName: string;
   recipientJobTitle: string;
   recipientNationalId?: string;
   recipientEmployeeCode?: string;
   departmentName: string;
+  // الطرف المسلّم (Deliverer - لمناقلة العهدة)
+  delivererName?: string;
+  delivererJobTitle?: string;
+  delivererDepartmentName?: string;
+  delivererEmployeeCode?: string;
+  delivererNationalId?: string;
+  transferReason?: string;
   approverTitle: string;
   approverName: string;
   status: 'معتمد' | 'مسودة' | 'مسلم';

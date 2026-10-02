@@ -23,7 +23,14 @@ export async function exportReportToPdf(options: ExportPdfOptions = {}): Promise
   const recipientName = report?.recipientName
     ? `_${report.recipientName.replace(/\s+/g, '_')}`
     : '';
-  const finalFilename = filename || `محضر_استلام_عهدة_${cleanNum}${recipientName}.pdf`;
+  const isTransfer =
+    report?.reportType === 'transfer' ||
+    Boolean(report?.delivererName && report?.delivererName.trim());
+  const finalFilename =
+    filename ||
+    (isTransfer
+      ? `إذن_مناقلة_عهدة_${cleanNum}${recipientName}.pdf`
+      : `محضر_استلام_عهدة_${cleanNum}${recipientName}.pdf`);
 
   try {
     // Render the element to a high-resolution canvas
