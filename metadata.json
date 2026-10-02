@@ -1,0 +1,8 @@
+{
+  "name": "عهدتي",
+  "description": "نظام احترافي لإدارة العهد الشخصية، إعداد محاضر الاستلام، وتنظيم بيانات الموظفين واللجان عبر قاعدة بيانات مركزية متكاملة.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
