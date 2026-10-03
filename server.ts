@@ -123,6 +123,110 @@ export interface DatabaseSchema {
   settings: OrganizationSettings;
 }
 
+const initialData: DatabaseSchema = {
+  settings: {
+    holdingCompanyName: 'الشركة القابضة لمياه الشرب والصرف الصحي',
+    subsidiaryCompanyName: 'شركه مياه الشرب والصرف الصحي بكفر الشيخ',
+    areaName: 'منطقة مياه دسوق',
+    defaultReportTitle: 'محضر استلام',
+    defaultApproverHeader: 'يعتمد',
+    defaultApproverTitle: 'مدير عام المنطقة',
+    defaultApproverName: '',
+    showWatermark: true,
+    showOfficialStamp: true,
+    showQrCode: true,
+    frameStyle: 'classic_double',
+    showRecipientJobTitleInPrint: true,
+    showEmployeeCodeInPrint: true,
+    showSerialColumnInPrint: false,
+    minimumTableRowsInPrint: 1,
+  },
+  departments: [
+    { id: 'dept-1', name: 'إدارة شبكات مياه دسوق', managerName: 'م. طارق عبد العزيز الشهاوي', location: 'المقر الرئيسي - منطقة دسوق', code: 'DSQ-NET-01' },
+    { id: 'dept-2', name: 'إدارة محطات المياه والروافع', managerName: 'م. سامح محمد النجار', location: 'محطة مياه دسوق الرئيسية', code: 'DSQ-STN-02' },
+    { id: 'dept-3', name: 'إدارة المخازن والمشتريات والعهد', managerName: 'أ. أشرف كمال أبو زيد', location: 'المخزن المركزي بدسوق', code: 'DSQ-STR-03' },
+    { id: 'dept-4', name: 'إدارة نظم المعلومات والتحول الرقمي', managerName: 'م. وليد حسن الصاوي', location: 'المبنى الإداري - الدور الثاني', code: 'DSQ-IT-04' },
+    { id: 'dept-5', name: 'إدارة الشئون المالية والإدارية', managerName: 'أ. محمود السيد الجندي', location: 'المبنى الإداري بدسوق', code: 'DSQ-FIN-05' },
+    { id: 'dept-6', name: 'إدارة المعامل والجودة', managerName: 'د. هاني عبد الرحمن قاسم', location: 'المعمل المركزي - محطة دسوق', code: 'DSQ-LAB-06' },
+    { id: 'dept-7', name: 'إدارة خدمة العملاء والتحصيل', managerName: 'أ. تامر فؤاد المنسي', location: 'مركز خدمة العملاء بدسوق', code: 'DSQ-CRM-07' },
+    { id: 'dept-8', name: 'إدارة السلامة والصحة المهنية', managerName: 'م. كمال إبراهيم زهران', location: 'المقر الرئيسي - منطقة دسوق', code: 'DSQ-HSE-08' },
+    { id: 'dept-9', name: 'إدارة الحملة الميكانيكية والحركة', managerName: 'م. إبراهيم كمال الطويل', location: 'جراج الحملة الميكانيكية بدسوق', code: 'DSQ-FLT-09' },
+    { id: 'dept-10', name: 'إدارة المشروعات والشئون الفنية', managerName: 'م. خالد جلال مطاوع', location: 'المبنى الإداري - الإدارة الفنية', code: 'DSQ-ENG-10' },
+  ],
+  recipients: [
+    { id: 'rec-1', name: 'أحمد محمد عبد السلام البنا', jobTitle: 'مهندس تشغيل وصيانة شبكات', departmentName: 'إدارة شبكات مياه دسوق', employeeCode: '10482', nationalId: '29104151501234', phone: '01004589211' },
+    { id: 'rec-2', name: 'إبراهيم السيد خلف الله', jobTitle: 'فني أول تشغيل محطات', departmentName: 'إدارة محطات المياه والروافع', employeeCode: '10819', nationalId: '28809221504412', phone: '01092341187' },
+    { id: 'rec-3', name: 'محمد عبد المنعم الشرقاوي', jobTitle: 'أخصائي نظم معلومات ودعم فني', departmentName: 'إدارة نظم المعلومات والتحول الرقمي', employeeCode: '11205', nationalId: '29402101508821', phone: '01227845109' },
+    { id: 'rec-4', name: 'السيد فتحي عبد الجواد', jobTitle: 'كيميائي معمل ومراقبة جودة', departmentName: 'إدارة المعامل والجودة', employeeCode: '10650', nationalId: '29011051503319', phone: '01115629034' },
+    { id: 'rec-5', name: 'ياسر كمال الدين درويش', jobTitle: 'مراجع حسابات وعهد فرعية', departmentName: 'إدارة الشئون المالية والإدارية', employeeCode: '10311', nationalId: '28506181501982', phone: '01061128940' },
+    { id: 'rec-6', name: 'أشرف كمال أبو زيد', jobTitle: 'مدير إدارة المخازن والعهد', departmentName: 'إدارة المخازن والمشتريات والعهد', employeeCode: '10101', nationalId: '27911041500213', phone: '01012345678' },
+    { id: 'rec-7', name: 'طارق عبد العزيز الشهاوي', jobTitle: 'مدير إدارة شبكات مياه دسوق', departmentName: 'إدارة شبكات مياه دسوق', employeeCode: '10055', nationalId: '27805121501199', phone: '01098765432' },
+    { id: 'rec-8', name: 'عادل عبد الحميد النحاس', jobTitle: 'مراقب عهدة ومخازن رئيسي', departmentName: 'إدارة المخازن والمشتريات والعهد', employeeCode: '10220', nationalId: '28203191500854', phone: '01234567890' },
+    { id: 'rec-9', name: 'وليد حسن الصاوي', jobTitle: 'مدير إدارة نظم المعلومات والتحول الرقمي', departmentName: 'إدارة نظم المعلومات والتحول الرقمي', employeeCode: '10350', nationalId: '28409011502467', phone: '01123456789' },
+    { id: 'rec-10', name: 'محمود السيد الجندي', jobTitle: 'رئيس قسم المراجعة المالية', departmentName: 'إدارة الشئون المالية والإدارية', employeeCode: '10188', nationalId: '28108151503341', phone: '01055566778' },
+    { id: 'rec-11', name: 'سامح محمد النجار', jobTitle: 'مدير إدارة المحطات والروافع', departmentName: 'إدارة محطات المياه والروافع', employeeCode: '10077', nationalId: '27712031500912', phone: '01066778899' },
+    { id: 'rec-12', name: 'كمال إبراهيم زهران', jobTitle: 'مسئول السلامة والصحة المهنية', departmentName: 'إدارة السلامة والصحة المهنية', employeeCode: '10540', nationalId: '28604171501552', phone: '01144556677' },
+    { id: 'rec-13', name: 'هاني عبد الرحمن قاسم', jobTitle: 'مدير إدارة المعامل والجودة', departmentName: 'إدارة المعامل والجودة', employeeCode: '10420', nationalId: '28001091500431', phone: '01288990011' },
+    { id: 'rec-14', name: 'تامر فؤاد المنسي', jobTitle: 'مدير إدارة خدمة العملاء والتحصيل', departmentName: 'إدارة خدمة العملاء والتحصيل', employeeCode: '10610', nationalId: '28310241501728', phone: '01077889900' },
+    { id: 'rec-15', name: 'سمير محمود عبد العال', jobTitle: 'فني كشف تسربات ومحابس شبكات', departmentName: 'إدارة شبكات مياه دسوق', employeeCode: '10933', nationalId: '28907141502188', phone: '01019283746' },
+    { id: 'rec-16', name: 'حسن علي البسيوني', jobTitle: 'سائق سيارة طوارئ ومعدات ثقيلة', departmentName: 'إدارة الحملة الميكانيكية والحركة', employeeCode: '11044', nationalId: '28703211504921', phone: '01138472910' },
+    { id: 'rec-17', name: 'صبحي عبد السلام عيسى', jobTitle: 'فني كهرباء ولوحات تحكم محطات', departmentName: 'إدارة محطات المياه والروافع', employeeCode: '10892', nationalId: '28402121503125', phone: '01023847192' },
+    { id: 'rec-18', name: 'مدحت شاكر الغرباوي', jobTitle: 'أمين مخزن قطع غيار ومهمات', departmentName: 'إدارة المخازن والمشتريات والعهد', employeeCode: '10255', nationalId: '28308191502441', phone: '01223948512' },
+    { id: 'rec-19', name: 'خالد جلال مطاوع', jobTitle: 'مهندس مشروعات وإحلال وتجديد', departmentName: 'إدارة المشروعات والشئون الفنية', employeeCode: '10512', nationalId: '29206151501177', phone: '01002938475' },
+    { id: 'rec-20', name: 'نادية محمود بدر', jobTitle: 'كيميائية تحاليل مياه شرب ومعايرة', departmentName: 'إدارة المعامل والجودة', employeeCode: '10698', nationalId: '29309081503412', phone: '01155667788' },
+  ],
+  committeeMembers: [
+    { id: 'cm-1', prefix: 'السيد الأستاذ /', name: 'أشرف كمال أبو زيد', jobTitle: 'مدير إدارة المخازن والعهد', defaultCommitteeRole: 'رئيسا', departmentName: 'إدارة المخازن والمشتريات والعهد' },
+    { id: 'cm-2', prefix: 'السيد المهندس /', name: 'طارق عبد العزيز الشهاوي', jobTitle: 'مدير إدارة شبكات مياه دسوق', defaultCommitteeRole: 'عضوا', departmentName: 'إدارة شبكات مياه دسوق' },
+    { id: 'cm-3', prefix: 'السيد الأستاذ /', name: 'عادل عبد الحميد النحاس', jobTitle: 'مراقب عهدة ومخازن رئيسي', defaultCommitteeRole: 'عضوا', departmentName: 'إدارة المخازن والمشتريات والعهد' },
+    { id: 'cm-4', prefix: 'السيد المهندس /', name: 'وليد حسن الصاوي', jobTitle: 'مدير إدارة نظم المعلومات', defaultCommitteeRole: 'عضوا فنيا', departmentName: 'إدارة نظم المعلومات والتحول الرقمي' },
+    { id: 'cm-5', prefix: 'السيد الأستاذ /', name: 'محمود السيد الجندي', jobTitle: 'رئيس قسم المراجعة المالية', defaultCommitteeRole: 'عضوا', departmentName: 'إدارة الشئون المالية والإدارية' },
+    { id: 'cm-6', prefix: 'السيد المهندس /', name: 'سامح محمد النجار', jobTitle: 'مدير إدارة المحطات والروافع', defaultCommitteeRole: 'رئيسا', departmentName: 'إدارة محطات المياه والروافع' },
+  ],
+  committeePresets: [
+    {
+      id: 'preset-1',
+      presetName: 'اللجنة الأساسية لفحص واستلام العهد الشخصية',
+      description: 'اللجنة المعتمدة لتسليم العهد الشخصية والمهمات الإدارية والفنية بمنطقة مياه دسوق',
+      members: [
+        { id: 'pm-1', prefix: 'السيد الأستاذ /', name: 'أشرف كمال أبو زيد', committeeRole: 'رئيسا', jobTitle: 'مدير إدارة المخازن والعهد' },
+        { id: 'pm-2', prefix: 'السيد المهندس /', name: 'طارق عبد العزيز الشهاوي', committeeRole: 'عضوا', jobTitle: 'مدير إدارة شبكات مياه دسوق' },
+        { id: 'pm-3', prefix: 'السيد الأستاذ /', name: 'عادل عبد الحميد النحاس', committeeRole: 'عضوا', jobTitle: 'مراقب عهدة ومخازن رئيسي' },
+      ],
+    },
+    {
+      id: 'preset-2',
+      presetName: 'لجنة استلام أجهزة الحاسب الآلي والشبكات',
+      description: 'لجنة فنية مختصة بتسليم أجهزة الحاسب والطابعات وأجهزة القياس الرقمية',
+      members: [
+        { id: 'pm-4', prefix: 'السيد المهندس /', name: 'وليد حسن الصاوي', committeeRole: 'رئيسا', jobTitle: 'مدير إدارة نظم المعلومات' },
+        { id: 'pm-5', prefix: 'السيد الأستاذ /', name: 'أشرف كمال أبو زيد', committeeRole: 'عضوا', jobTitle: 'مدير إدارة المخازن والعهد' },
+        { id: 'pm-6', prefix: 'السيد الأستاذ /', name: 'محمود السيد الجندي', committeeRole: 'عضوا', jobTitle: 'رئيس قسم المراجعة المالية' },
+      ],
+    },
+    {
+      id: 'preset-3',
+      presetName: 'لجنة مهمات المحطات والروافع والسلامة المهنية',
+      description: 'لجنة استلام المعدات الميكانيكية وأجهزة القياس ومهمات السلامة المهنية',
+      members: [
+        { id: 'pm-7', prefix: 'السيد المهندس /', name: 'سامح محمد النجار', committeeRole: 'رئيسا', jobTitle: 'مدير إدارة المحطات والروافع' },
+        { id: 'pm-8', prefix: 'السيد المهندس /', name: 'كمال إبراهيم زهران', committeeRole: 'عضوا', jobTitle: 'مسئول السلامة والصحة المهنية' },
+        { id: 'pm-9', prefix: 'السيد الأستاذ /', name: 'عادل عبد الحميد النحاس', committeeRole: 'عضوا', jobTitle: 'مراقب عهدة ومخازن رئيسي' },
+      ],
+    },
+  ],
+  catalogItems: [
+    { id: 'cat-1', itemName: 'جهاز حاسب آلي محمول (لابتوب) Dell Latitude 5540 - معالج Core i7 - رام 16 جيجا - بالشاحن الأصلي', defaultUnit: 'عدد', category: 'أجهزة وحاسب آلي', defaultNotes: 'جديد بالكرتونة - عهدة شخصية' },
+    { id: 'cat-2', itemName: 'طابعة ليزر متعددة الوظائف HP LaserJet Pro MFP M428fdw بكابل البيانات والتغذية', defaultUnit: 'عدد', category: 'أجهزة وحاسب آلي', defaultNotes: 'بحالة ممتازة - شاملة الحبر الأساسي' },
+    { id: 'cat-3', itemName: 'جهاز قياس نسبة الكلور الحر والرقم الهيدروجيني الرقمي (Pocket Colorimeter II) بالحقيبة', defaultUnit: 'جهاز', category: 'أجهزة قياس ومعامل', defaultNotes: 'شامل المحاليل القياسية والمعايرة' },
+    { id: 'cat-4', itemName: 'طقم عدة صيانة ميكانيكية متكامل 68 قطعة داخل صندوق معدني ثقيل', defaultUnit: 'طقم', category: 'مهمات تشغيل وصيانة', defaultNotes: 'كامل المشمول وجديد' },
+    { id: 'cat-5', itemName: 'جهاز قياس ضغط مياه رقمي (مانومتر ديجيتال 0-16 بار) بالوصلات النحاسية', defaultUnit: 'عدد', category: 'أجهزة قياس ومعامل', defaultNotes: 'تمت المعايرة الفنية' },
+    { id: 'cat-6', itemName: 'مهمات وقاية وسلامة مهنية (خوذة أمان + حذاء سيفتي + جاكيت فسفوري عاكس)', defaultUnit: 'طقم', category: 'مهمات سلامة مهنية', defaultNotes: 'عهدة شخصية للموقع' },
+    { id: 'cat-7', itemName: 'مكتب خشبي زان مقاس 160 سم بـ 3 أدراج جانبية + كرسي مكتب هيدروليك متحرك', defaultUnit: 'طقم', category: 'أثاث ومهمات مكتبية', defaultNotes: 'حالة جيدة جداً' },
+  ],
+  reports: [],
+};
+
 function ensureDb(): DatabaseSchema {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -130,148 +234,26 @@ function ensureDb(): DatabaseSchema {
   if (fs.existsSync(DB_FILE)) {
     try {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
-      return JSON.parse(raw) as DatabaseSchema;
+      const parsed = JSON.parse(raw) as DatabaseSchema;
+      if (parsed) {
+        let modified = false;
+        if (!parsed.recipients || parsed.recipients.length === 0) {
+          parsed.recipients = initialData.recipients;
+          modified = true;
+        }
+        if (!parsed.departments || parsed.departments.length === 0) {
+          parsed.departments = initialData.departments;
+          modified = true;
+        }
+        if (modified) {
+          fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2), 'utf-8');
+        }
+        return parsed;
+      }
     } catch {
       // ignore
     }
   }
-  const initialData: DatabaseSchema = {
-    settings: {
-      holdingCompanyName: 'الشركة القابضة لمياه الشرب والصرف الصحي',
-      subsidiaryCompanyName: 'شركه مياه الشرب والصرف الصحي بكفر الشيخ',
-      areaName: 'منطقة مياه دسوق',
-      defaultReportTitle: 'محضر استلام',
-      defaultApproverHeader: 'يعتمد',
-      defaultApproverTitle: 'مدير عام المنطقة',
-      defaultApproverName: '',
-      showWatermark: true,
-      showOfficialStamp: true,
-      showQrCode: true,
-      frameStyle: 'classic_double',
-      showRecipientJobTitleInPrint: true,
-      showEmployeeCodeInPrint: true,
-      showSerialColumnInPrint: false,
-      minimumTableRowsInPrint: 1,
-    },
-    departments: [
-      { id: 'dept-1', name: 'إدارة شبكات مياه دسوق', managerName: 'م. طارق عبد العزيز الشهاوي', location: 'المقر الرئيسي - منطقة دسوق', code: 'DSQ-NET-01' },
-      { id: 'dept-2', name: 'إدارة محطات المياه والروافع', managerName: 'م. سامح محمد النجار', location: 'محطة مياه دسوق الرئيسية', code: 'DSQ-STN-02' },
-      { id: 'dept-3', name: 'إدارة المخازن والمشتريات والعهد', managerName: 'أ. أشرف كمال أبو زيد', location: 'المخزن المركزي بدسوق', code: 'DSQ-STR-03' },
-      { id: 'dept-4', name: 'إدارة نظم المعلومات والتحول الرقمي', managerName: 'م. وليد حسن الصاوي', location: 'المبنى الإداري - الدور الثاني', code: 'DSQ-IT-04' },
-      { id: 'dept-5', name: 'إدارة الشئون المالية والإدارية', managerName: 'أ. محمود السيد الجندي', location: 'المبنى الإداري بدسوق', code: 'DSQ-FIN-05' },
-      { id: 'dept-6', name: 'إدارة المعامل والجودة', managerName: 'د. هاني عبد الرحمن قاسم', location: 'المعمل المركزي - محطة دسوق', code: 'DSQ-LAB-06' },
-      { id: 'dept-7', name: 'إدارة خدمة العملاء والتحصيل', managerName: 'أ. تامر فؤاد المنسي', location: 'مركز خدمة العملاء بدسوق', code: 'DSQ-CRM-07' },
-      { id: 'dept-8', name: 'إدارة السلامة والصحة المهنية', managerName: 'م. كمال إبراهيم زهران', location: 'المقر الرئيسي - منطقة دسوق', code: 'DSQ-HSE-08' },
-    ],
-    recipients: [
-      { id: 'rec-1', name: 'أحمد محمد عبد السلام البنا', jobTitle: 'مهندس تشغيل وصيانة شبكات', departmentName: 'إدارة شبكات مياه دسوق', employeeCode: '10482', nationalId: '29104151501234', phone: '01004589211' },
-      { id: 'rec-2', name: 'إبراهيم السيد خلف الله', jobTitle: 'فني أول تشغيل محطات', departmentName: 'إدارة محطات المياه والروافع', employeeCode: '10819', nationalId: '28809221504412', phone: '01092341187' },
-      { id: 'rec-3', name: 'محمد عبد المنعم الشرقاوي', jobTitle: 'أخصائي نظم معلومات ودعم فني', departmentName: 'إدارة نظم المعلومات والتحول الرقمي', employeeCode: '11205', nationalId: '29402101508821', phone: '01227845109' },
-      { id: 'rec-4', name: 'السيد فتحي عبد الجواد', jobTitle: 'كيميائي معمل ومراقبة جودة', departmentName: 'إدارة المعامل والجودة', employeeCode: '10650', nationalId: '29011051503319', phone: '01115629034' },
-      { id: 'rec-5', name: 'ياسر كمال الدين درويش', jobTitle: 'مراجع حسابات وعهد فرعية', departmentName: 'إدارة الشئون المالية والإدارية', employeeCode: '10311', nationalId: '28506181501982', phone: '01061128940' },
-    ],
-    committeeMembers: [
-      { id: 'cm-1', prefix: 'السيد الأستاذ /', name: 'أشرف كمال أبو زيد', jobTitle: 'مدير إدارة المخازن والعهد', defaultCommitteeRole: 'رئيسا', departmentName: 'إدارة المخازن والمشتريات والعهد' },
-      { id: 'cm-2', prefix: 'السيد المهندس /', name: 'طارق عبد العزيز الشهاوي', jobTitle: 'مدير إدارة شبكات مياه دسوق', defaultCommitteeRole: 'عضوا', departmentName: 'إدارة شبكات مياه دسوق' },
-      { id: 'cm-3', prefix: 'السيد الأستاذ /', name: 'عادل عبد الحميد النحاس', jobTitle: 'مراقب عهدة ومخازن رئيسي', defaultCommitteeRole: 'عضوا', departmentName: 'إدارة المخازن والمشتريات والعهد' },
-      { id: 'cm-4', prefix: 'السيد المهندس /', name: 'وليد حسن الصاوي', jobTitle: 'مدير إدارة نظم المعلومات', defaultCommitteeRole: 'عضوا فنيا', departmentName: 'إدارة نظم المعلومات والتحول الرقمي' },
-      { id: 'cm-5', prefix: 'السيد الأستاذ /', name: 'محمود السيد الجندي', jobTitle: 'رئيس قسم المراجعة المالية', defaultCommitteeRole: 'عضوا', departmentName: 'إدارة الشئون المالية والإدارية' },
-      { id: 'cm-6', prefix: 'السيد المهندس /', name: 'سامح محمد النجار', jobTitle: 'مدير إدارة المحطات والروافع', defaultCommitteeRole: 'رئيسا', departmentName: 'إدارة محطات المياه والروافع' },
-    ],
-    committeePresets: [
-      {
-        id: 'preset-1',
-        presetName: 'اللجنة الأساسية لفحص واستلام العهد الشخصية',
-        description: 'اللجنة المعتمدة لتسليم العهد الشخصية والمهمات الإدارية والفنية بمنطقة مياه دسوق',
-        members: [
-          { id: 'pm-1', prefix: 'السيد الأستاذ /', name: 'أشرف كمال أبو زيد', committeeRole: 'رئيسا', jobTitle: 'مدير إدارة المخازن والعهد' },
-          { id: 'pm-2', prefix: 'السيد المهندس /', name: 'طارق عبد العزيز الشهاوي', committeeRole: 'عضوا', jobTitle: 'مدير إدارة شبكات مياه دسوق' },
-          { id: 'pm-3', prefix: 'السيد الأستاذ /', name: 'عادل عبد الحميد النحاس', committeeRole: 'عضوا', jobTitle: 'مراقب عهدة ومخازن رئيسي' },
-        ],
-      },
-      {
-        id: 'preset-2',
-        presetName: 'لجنة استلام أجهزة الحاسب الآلي والشبكات',
-        description: 'لجنة فنية مختصة بتسليم أجهزة الحاسب والطابعات وأجهزة القياس الرقمية',
-        members: [
-          { id: 'pm-4', prefix: 'السيد المهندس /', name: 'وليد حسن الصاوي', committeeRole: 'رئيسا', jobTitle: 'مدير إدارة نظم المعلومات' },
-          { id: 'pm-5', prefix: 'السيد الأستاذ /', name: 'أشرف كمال أبو زيد', committeeRole: 'عضوا', jobTitle: 'مدير إدارة المخازن والعهد' },
-          { id: 'pm-6', prefix: 'السيد الأستاذ /', name: 'محمود السيد الجندي', committeeRole: 'عضوا', jobTitle: 'رئيس قسم المراجعة المالية' },
-        ],
-      },
-    ],
-    catalogItems: [
-      { id: 'cat-1', itemName: 'جهاز حاسب آلي محمول (لابتوب) Dell Latitude 5540 - معالج Core i7 - رام 16 جيجا - بالشاحن الأصلي والحقيبة', defaultUnit: 'عدد', category: 'أجهزة وحاسب آلي', defaultNotes: 'جديد بالكرتونة - عهدة شخصية' },
-      { id: 'cat-2', itemName: 'طابعة ليزر متعددة الوظائف HP LaserJet Pro MFP M428fdw بكابل البيانات والتغذية', defaultUnit: 'عدد', category: 'أجهزة وحاسب آلي', defaultNotes: 'بحالة ممتازة - شاملة الحبر الأساسي' },
-      { id: 'cat-3', itemName: 'جهاز قياس نسبة الكلور الحر والرقم الهيدروجيني الرقمي (Pocket Colorimeter II) بالحقيبة', defaultUnit: 'جهاز', category: 'أجهزة قياس ومعامل', defaultNotes: 'شامل المحاليل القياسية والمعايرة' },
-      { id: 'cat-4', itemName: 'طقم عدة صيانة ميكانيكية متكامل 68 قطعة داخل صندوق معدني ثقيل', defaultUnit: 'طقم', category: 'مهمات تشغيل وصيانة', defaultNotes: 'كامل المشمول وجديد' },
-      { id: 'cat-5', itemName: 'جهاز قياس ضغط مياه رقمي (مانومتر ديجيتال 0-16 بار) بالوصلات النحاسية', defaultUnit: 'عدد', category: 'أجهزة قياس ومعامل', defaultNotes: 'تمت المعايرة الفنية' },
-      { id: 'cat-6', itemName: 'مهمات وقاية وسلامة مهنية (خوذة أمان + حذاء سيفتي + جاكيت فسفوري عاكس)', defaultUnit: 'طقم', category: 'مهمات سلامة مهنية', defaultNotes: 'عهدة شخصية للموقع' },
-    ],
-    reports: [
-      {
-        id: 'rep-2026-001',
-        reportNumber: '2026/101',
-        reportTitle: 'محضر استلام',
-        dayName: 'الجمعة',
-        meetingDate: '2026-10-02',
-        issueDate: '2026-10-02',
-        committeeMembers: [
-          { id: 'cm-r1', prefix: 'السيد الأستاذ /', name: 'أشرف كمال أبو زيد', committeeRole: 'رئيسا', jobTitle: 'مدير إدارة المخازن والعهد' },
-          { id: 'cm-r2', prefix: 'السيد المهندس /', name: 'طارق عبد العزيز الشهاوي', committeeRole: 'عضوا', jobTitle: 'مدير إدارة شبكات مياه دسوق' },
-          { id: 'cm-r3', prefix: 'السيد الأستاذ /', name: 'عادل عبد الحميد النحاس', committeeRole: 'عضوا', jobTitle: 'مراقب عهدة ومخازن رئيسي' },
-        ],
-        items: [
-          { id: 'item-1', itemName: 'جهاز قياس ضغط مياه رقمي (مانومتر ديجيتال 0-16 بار) بالوصلات النحاسية والحقيبة الواقية', unit: 'عدد', quantity: 1, tafqeet: 'واحد فقط لا غير', notes: 'جديد وصالح للعمل' },
-          { id: 'item-2', itemName: 'طقم عدة صيانة ميكانيكية متكامل 68 قطعة داخل صندوق معدني ثقيل', unit: 'طقم', quantity: 2, tafqeet: 'اثنان فقط لا غير', notes: 'كامل المشمول' },
-        ],
-        recipientName: 'أحمد محمد عبد السلام البنا',
-        recipientJobTitle: 'مهندس تشغيل وصيانة شبكات',
-        recipientEmployeeCode: '10482',
-        recipientNationalId: '29104151501234',
-        departmentName: 'إدارة شبكات مياه دسوق',
-        approverTitle: 'مدير عام المنطقة',
-        approverName: '',
-        status: 'معتمد',
-        custodyType: 'عهدة شخصية مستديمة',
-        signatureTableRoleDisplay: 'jobTitle',
-        generalNotes: 'تم الفحص والمعاينة بمعرفة اللجنة وتسليم الأصناف للمستلم بحالة جيدة وصالحة للاستخدام.',
-        createdAt: '2026-10-02T08:00:00.000Z',
-        updatedAt: '2026-10-02T08:00:00.000Z',
-      },
-      {
-        id: 'rep-2026-002',
-        reportNumber: '2026/102',
-        reportTitle: 'محضر استلام',
-        dayName: 'الخميس',
-        meetingDate: '2026-10-01',
-        issueDate: '2026-10-01',
-        committeeMembers: [
-          { id: 'cm-r4', prefix: 'السيد المهندس /', name: 'وليد حسن الصاوي', committeeRole: 'رئيسا', jobTitle: 'مدير إدارة نظم المعلومات' },
-          { id: 'cm-r5', prefix: 'السيد الأستاذ /', name: 'أشرف كمال أبو زيد', committeeRole: 'عضوا', jobTitle: 'مدير إدارة المخازن والعهد' },
-          { id: 'cm-r6', prefix: 'السيد الأستاذ /', name: 'محمود السيد الجندي', committeeRole: 'عضوا', jobTitle: 'رئيس قسم المراجعة المالية' },
-        ],
-        items: [
-          { id: 'item-3', itemName: 'جهاز حاسب آلي محمول (لابتوب) Dell Latitude 5540 - معالج Core i7 - رام 16 جيجا - بالشاحن الأصلي', unit: 'عدد', quantity: 1, tafqeet: 'واحد فقط لا غير', notes: 'جديد بالكرتونة S/N: DL5540-9821' },
-          { id: 'item-4', itemName: 'طابعة ليزر متعددة الوظائف HP LaserJet Pro MFP M428fdw بكابل البيانات والتغذية', unit: 'عدد', quantity: 1, tafqeet: 'واحد فقط لا غير', notes: 'شاملة التونر الأصلي' },
-        ],
-        recipientName: 'محمد عبد المنعم الشرقاوي',
-        recipientJobTitle: 'أخصائي نظم معلومات ودعم فني',
-        recipientEmployeeCode: '11205',
-        recipientNationalId: '29402101508821',
-        departmentName: 'إدارة نظم المعلومات والتحول الرقمي',
-        approverTitle: 'مدير عام المنطقة',
-        approverName: '',
-        status: 'مسلم',
-        custodyType: 'أجهزة وحاسب آلي',
-        signatureTableRoleDisplay: 'jobTitle',
-        generalNotes: 'عهدة شخصية لأعمال التحول الرقمي وميكنة التقارير بالمنطقة.',
-        createdAt: '2026-10-01T10:30:00.000Z',
-        updatedAt: '2026-10-01T10:30:00.000Z',
-      },
-    ],
-  };
-  fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), 'utf-8');
   return initialData;
 }
 

@@ -25,6 +25,8 @@ import {
   Loader2,
   Share2,
   ArrowLeftRight,
+  RefreshCw,
+  Phone,
 } from 'lucide-react';
 import {
   DatabaseSchema,
@@ -245,6 +247,10 @@ export default function App() {
     code: '',
   });
 
+  const [recipientSearchQuery, setRecipientSearchQuery] = useState('');
+  const [recipientDeptFilter, setRecipientDeptFilter] = useState('all');
+  const [departmentSearchQuery, setDepartmentSearchQuery] = useState('');
+
   // Committees & Catalog tab states
   const [newCommitteeMember, setNewCommitteeMember] = useState<Omit<CommitteeMemberRecord, 'id'>>({
     prefix: 'السيد الأستاذ /',
@@ -278,14 +284,27 @@ export default function App() {
         if (!res.ok) throw new Error('Failed to fetch from server');
         const data = (await res.json()) as DatabaseSchema;
         if (isMounted && data && Array.isArray(data.reports)) {
-          setDb(data);
+          const validRecipients =
+            data.recipients && data.recipients.length > 0
+              ? data.recipients
+              : DEFAULT_DATABASE.recipients;
+          const validDepartments =
+            data.departments && data.departments.length > 0
+              ? data.departments
+              : DEFAULT_DATABASE.departments;
+          const cleanData: DatabaseSchema = {
+            ...data,
+            recipients: validRecipients,
+            departments: validDepartments,
+          };
+          setDb(cleanData);
           try {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cleanData));
           } catch {
             // ignore
           }
-          if (data.reports.length > 0) {
-            setCurrentReport(data.reports[0]);
+          if (cleanData.reports.length > 0) {
+            setCurrentReport(cleanData.reports[0]);
           }
         }
       } catch {
@@ -391,7 +410,13 @@ export default function App() {
     }
   };
 
-  const handleCreateNewReport = (reportType: 'receipt' | 'transfer' = 'receipt') => {
+  const handleCreateNewReport = (
+    reportType: 'receipt' | 'transfer' = 'receipt',
+    prefill?: {
+      recipient?: RecipientRecord;
+      deliverer?: RecipientRecord;
+    }
+  ) => {
     if (!db) return;
     const nextSeq = 101 + db.reports.length;
     const nextNumber = `2026/${nextSeq}`;
@@ -403,6 +428,20 @@ export default function App() {
       db.settings.defaultApproverName,
       reportType
     );
+    if (prefill?.recipient) {
+      fresh.recipientName = prefill.recipient.name;
+      fresh.recipientJobTitle = prefill.recipient.jobTitle;
+      fresh.departmentName = prefill.recipient.departmentName;
+      fresh.recipientEmployeeCode = prefill.recipient.employeeCode;
+      fresh.recipientNationalId = prefill.recipient.nationalId;
+    }
+    if (prefill?.deliverer) {
+      fresh.delivererName = prefill.deliverer.name;
+      fresh.delivererJobTitle = prefill.deliverer.jobTitle;
+      fresh.delivererDepartmentName = prefill.deliverer.departmentName;
+      fresh.delivererEmployeeCode = prefill.deliverer.employeeCode;
+      fresh.delivererNationalId = prefill.deliverer.nationalId;
+    }
     setCurrentReport(fresh);
     setActiveTab('editor');
     showToast(
@@ -763,6 +802,38 @@ export default function App() {
     return Array.from(set).sort();
   }, [db]);
 
+  const filteredDirectoryRecipients = useMemo(() => {
+    if (!db || !db.recipients) return [];
+    let list = db.recipients;
+    if (recipientDeptFilter !== 'all') {
+      list = list.filter((r) => r.departmentName === recipientDeptFilter);
+    }
+    const q = recipientSearchQuery.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        r.jobTitle.toLowerCase().includes(q) ||
+        r.departmentName.toLowerCase().includes(q) ||
+        r.employeeCode.toLowerCase().includes(q) ||
+        r.nationalId.toLowerCase().includes(q) ||
+        r.phone.toLowerCase().includes(q)
+    );
+  }, [db, recipientSearchQuery, recipientDeptFilter]);
+
+  const filteredDirectoryDepartments = useMemo(() => {
+    if (!db || !db.departments) return [];
+    const q = departmentSearchQuery.trim().toLowerCase();
+    if (!q) return db.departments;
+    return db.departments.filter(
+      (d) =>
+        d.name.toLowerCase().includes(q) ||
+        d.code.toLowerCase().includes(q) ||
+        d.managerName.toLowerCase().includes(q) ||
+        d.location.toLowerCase().includes(q)
+    );
+  }, [db, departmentSearchQuery]);
+
   const handleExportDatabase = () => {
     if (!db) return;
     const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
@@ -800,171 +871,241 @@ export default function App() {
 
   return (
     <div dir="rtl" className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
-      {/* Top Bar (3-Zone Header, hidden in print) */}
-      <header className="no-print sticky top-0 z-30 bg-white border-b border-slate-200 px-4 lg:px-8 py-3 flex items-center justify-between gap-4">
-        {/* Zone 1: Brand Wordmark */}
-        <a
-          href="#editor"
-          onClick={(e) => {
-            e.preventDefault();
-            setActiveTab('editor');
-          }}
-          className="text-base lg:text-lg font-extrabold tracking-tight text-slate-900 whitespace-nowrap flex items-center gap-2"
-        >
-          <span className="w-2.5 h-2.5 rounded-full bg-sky-700"></span>
-          <span>عهدتي</span>
-          <span className="text-xs font-semibold text-slate-500 hidden sm:inline">
-            | منظومة محاضر العهد الشخصية
-          </span>
-        </a>
+      {/* Top Executive Governmental & Corporate Header */}
+      <header className="no-print sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-sm">
+        {/* Tier 1: Main Bar: Brand Identity, Center Navigation Tabs, and Executive Actions */}
+        <div className="px-4 lg:px-7 py-2.5 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 border-b border-slate-100 lg:border-b-0">
+          
+          {/* Brand & Organization Identity */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#081c30] via-[#0b2b4c] to-[#0e3b66] text-white flex items-center justify-center font-black text-xl shadow-md border border-sky-400/20 select-none">
+              <span className="drop-shadow-sm">ع</span>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-base sm:text-lg font-black tracking-tight text-[#081c30]">
+                  منظومة عهدتي
+                </span>
+                <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300/80 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full shadow-2xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  {db.settings.areaName || 'منطقة مياه دسوق'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 font-bold hidden sm:block">
+                {db.settings.subsidiaryCompanyName || 'شركة مياه الشرب والصرف الصحي بكفر الشيخ'}
+              </p>
+            </div>
+          </div>
 
-        {/* Zone 2: Navigation Links */}
-        <nav className="hidden md:flex items-center gap-6 text-sm font-semibold text-slate-600">
-          <button
-            type="button"
-            onClick={() => setActiveTab('editor')}
-            className={`py-1 transition-colors whitespace-nowrap border-b-2 ${
-              activeTab === 'editor'
-                ? 'border-sky-700 text-sky-800'
-                : 'border-transparent hover:text-slate-900'
-            }`}
-          >
-            تحرير محضر استلام
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('archive')}
-            className={`py-1 transition-colors whitespace-nowrap border-b-2 ${
-              activeTab === 'archive'
-                ? 'border-sky-700 text-sky-800'
-                : 'border-transparent hover:text-slate-900'
-            }`}
-          >
-            سجل المحاضر والبحث ({db.reports.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('recipients')}
-            className={`py-1 transition-colors whitespace-nowrap border-b-2 ${
-              activeTab === 'recipients'
-                ? 'border-sky-700 text-sky-800'
-                : 'border-transparent hover:text-slate-900'
-            }`}
-          >
-            المستلمون والإدارات
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('committees')}
-            className={`py-1 transition-colors whitespace-nowrap border-b-2 ${
-              activeTab === 'committees'
-                ? 'border-sky-700 text-sky-800'
-                : 'border-transparent hover:text-slate-900'
-            }`}
-          >
-            اللجان والأصناف
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('settings')}
-            className={`py-1 transition-colors whitespace-nowrap border-b-2 ${
-              activeTab === 'settings'
-                ? 'border-sky-700 text-sky-800'
-                : 'border-transparent hover:text-slate-900'
-            }`}
-          >
-            إعدادات الترويسة والبيانات
-          </button>
-        </nav>
+          {/* Center: The Navigation Tabs - Desktop Inline */}
+          <nav className="hidden lg:flex items-center gap-1 bg-slate-100/95 p-1 rounded-xl border border-slate-200/90 shadow-inner">
+            {[
+              {
+                id: 'editor',
+                label: 'محرر المحاضر والأذون',
+                icon: FileText,
+                badge: currentReport?.reportType === 'transfer' ? 'مناقيل' : 'استلام',
+                badgeColor:
+                  currentReport?.reportType === 'transfer'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-sky-600 text-white',
+              },
+              {
+                id: 'archive',
+                label: 'سجل المحاضر والبحث',
+                icon: Search,
+                badge: String(db.reports.length),
+                badgeColor: 'bg-slate-200 text-slate-800',
+              },
+              {
+                id: 'recipients',
+                label: 'دليل المستلمين والموظفين',
+                icon: Users,
+                badge: String(db.recipients.length),
+                badgeColor: 'bg-sky-100 text-sky-900 border border-sky-200',
+              },
+              {
+                id: 'committees',
+                label: 'اللجان وقائمة الأصناف',
+                icon: Package,
+              },
+              {
+                id: 'settings',
+                label: 'إعدادات المنظومة والطباعة',
+                icon: Settings,
+              },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap select-none ${
+                    isActive
+                      ? 'bg-[#081c30] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                  }`}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-sky-300' : 'text-slate-500'}`} />
+                  <span>{tab.label}</span>
+                  {tab.badge && (
+                    <span
+                      className={`text-[10px] font-mono-num font-extrabold px-1.5 py-0.2 rounded-full ${
+                        isActive ? 'bg-white/20 text-white' : tab.badgeColor || 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
 
-        {/* Zone 3: Primary Actions (Export PDF, DOCX, Print) */}
-        <div className="flex items-center gap-2">
-          {/* Quick Create Buttons */}
-          <button
-            type="button"
-            onClick={() => handleCreateNewReport('receipt')}
-            className="hidden xl:flex px-3 py-2 text-xs font-bold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-300 rounded-lg transition-colors whitespace-nowrap items-center gap-1.5 shadow-xs"
-            title="إنشاء نموذج محضر استلام عهدة جديد"
-          >
-            <Plus className="w-3.5 h-3.5 text-sky-700" />
-            <span>محضر استلام جديد</span>
-          </button>
+          {/* Quick Primary Actions Bar */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Quick Create: Receipt */}
+            <button
+              type="button"
+              onClick={() => handleCreateNewReport('receipt')}
+              className="px-3 py-1.5 text-xs font-extrabold text-sky-900 bg-sky-50 hover:bg-sky-100 active:bg-sky-200 border border-sky-300 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs whitespace-nowrap"
+              title="إنشاء نموذج محضر استلام عهدة جديد"
+            >
+              <Plus className="w-3.5 h-3.5 text-sky-700" />
+              <span className="hidden sm:inline">محضر استلام</span>
+              <span className="sm:hidden">استلام</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => handleCreateNewReport('transfer')}
-            className="hidden xl:flex px-3 py-2 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors whitespace-nowrap items-center gap-1.5 shadow-xs"
-            title="إنشاء نموذج إذن مناقيل عهدة جديد (مُسلِّم ومُستلم)"
-          >
-            <Share2 className="w-3.5 h-3.5 text-emerald-200" />
-            <span>إذن مناقيل جديد</span>
-          </button>
+            {/* Quick Create: Transfer */}
+            <button
+              type="button"
+              onClick={() => handleCreateNewReport('transfer')}
+              className="px-3 py-1.5 text-xs font-extrabold text-white bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 border border-emerald-800 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs whitespace-nowrap"
+              title="إنشاء نموذج إذن مناقيل عهدة جديد (مُسلِّم ومُستلم)"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5 text-emerald-200" />
+              <span className="hidden sm:inline">إذن مناقيل</span>
+              <span className="sm:hidden">مناقيل</span>
+            </button>
 
-          {/* Quick PDF Export with jspdf & html2canvas */}
-          <button
-            type="button"
-            onClick={() => handleExportPdf(currentReport)}
-            disabled={isExportingPdf}
-            className="px-3 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5 shadow-xs disabled:opacity-60"
-            title="تصدير محضر الاستلام إلى ملف PDF باستخدام jspdf و html2canvas"
-          >
-            {isExportingPdf ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <FileDown className="w-4 h-4 text-rose-600" />
-            )}
-            <span>تصدير PDF</span>
-          </button>
+            <div className="h-5 w-[1px] bg-slate-200 mx-0.5 hidden sm:block"></div>
 
-          {/* Quick DOCX Export */}
-          <button
-            type="button"
-            onClick={() => handleExportDocx(currentReport)}
-            disabled={isExportingDocx}
-            className="px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5 shadow-xs disabled:opacity-60"
-            title="تصدير محضر الاستلام إلى ملف Word (DOCX)"
-          >
-            <FileText className="w-4 h-4 text-blue-600" />
-            <span>تصدير DOCX</span>
-          </button>
+            {/* Print A4 */}
+            <button
+              type="button"
+              onClick={() => {
+                handleSaveReport();
+                setTimeout(() => window.print(), 150);
+              }}
+              className="px-3.5 py-1.5 text-xs font-bold text-white bg-[#081c30] hover:bg-[#0f3459] active:bg-[#061422] rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs whitespace-nowrap"
+              title="طباعة الورقة الرسمية A4 مباشرة"
+            >
+              <Printer className="w-3.5 h-3.5 text-sky-300" />
+              <span className="hidden sm:inline">طباعة A4</span>
+              <span className="sm:hidden">طباعة</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              handleSaveReport();
-              setTimeout(() => window.print(), 150);
-            }}
-            className="px-3.5 py-2 text-xs font-bold text-white bg-sky-700 hover:bg-sky-800 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5 shadow-xs"
-          >
-            <Printer className="w-4 h-4" />
-            <span className="hidden sm:inline">طباعة ورقية</span>
-          </button>
+            {/* Quick PDF Export */}
+            <button
+              type="button"
+              onClick={() => handleExportPdf(currentReport)}
+              disabled={isExportingPdf}
+              className="px-2.5 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap disabled:opacity-60"
+              title="تصدير المستند الحالي إلى PDF"
+            >
+              {isExportingPdf ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <FileDown className="w-3.5 h-3.5 text-rose-600" />
+              )}
+              <span className="hidden xl:inline">PDF</span>
+            </button>
+
+            {/* Quick DOCX Export */}
+            <button
+              type="button"
+              onClick={() => handleExportDocx(currentReport)}
+              disabled={isExportingDocx}
+              className="px-2.5 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap disabled:opacity-60"
+              title="تصدير المستند الحالي إلى ملف Word (DOCX)"
+            >
+              <FileText className="w-3.5 h-3.5 text-blue-600" />
+              <span className="hidden xl:inline">Word</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile & Tablet Tab Bar (visible on < lg) */}
+        <div className="lg:hidden px-3 bg-slate-50 border-t border-slate-100 overflow-x-auto py-1.5">
+          <nav className="flex items-center gap-1.5 min-w-max">
+            {[
+              {
+                id: 'editor',
+                label: 'محرر المحاضر والأذون',
+                icon: FileText,
+                badge: currentReport?.reportType === 'transfer' ? 'مناقيل' : 'استلام',
+                badgeColor:
+                  currentReport?.reportType === 'transfer'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-sky-600 text-white',
+              },
+              {
+                id: 'archive',
+                label: 'سجل المحاضر والبحث',
+                icon: Search,
+                badge: String(db.reports.length),
+                badgeColor: 'bg-slate-200 text-slate-800',
+              },
+              {
+                id: 'recipients',
+                label: 'دليل المستلمين والموظفين',
+                icon: Users,
+                badge: String(db.recipients.length),
+                badgeColor: 'bg-sky-100 text-sky-900 border border-sky-200',
+              },
+              {
+                id: 'committees',
+                label: 'اللجان وقائمة الأصناف',
+                icon: Package,
+              },
+              {
+                id: 'settings',
+                label: 'إعدادات المنظومة والطباعة',
+                icon: Settings,
+              },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                    isActive
+                      ? 'bg-[#081c30] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+                  }`}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-sky-300' : 'text-slate-500'}`} />
+                  <span>{tab.label}</span>
+                  {tab.badge && (
+                    <span
+                      className={`text-[10px] font-mono-num font-extrabold px-1.5 py-0.2 rounded-full ${
+                        isActive ? 'bg-white/20 text-white' : tab.badgeColor || 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
         </div>
       </header>
-
-      {/* Mobile Navigation */}
-      <div className="no-print md:hidden bg-white border-b border-slate-200 px-3 py-2 flex items-center gap-1.5 overflow-x-auto">
-        {[
-          { id: 'editor', label: 'تحرير المحضر' },
-          { id: 'archive', label: `السجل والبحث (${db.reports.length})` },
-          { id: 'recipients', label: 'المستلمون والإدارات' },
-          { id: 'committees', label: 'اللجان والأصناف' },
-          { id: 'settings', label: 'الإعدادات' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id as typeof activeTab)}
-            className={`px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-colors ${
-              activeTab === tab.id
-                ? 'bg-sky-700 text-white'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
 
       {/* Toast Notification */}
       {saveBanner && (
@@ -976,25 +1117,36 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 w-full max-w-[1600px] mx-auto px-4 lg:px-8 py-5 no-print">
-        {/* Unboxed clean metadata header */}
-        <div className="mb-5 pb-3 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
-            <span className="text-slate-900 font-bold">{db.settings.holdingCompanyName}</span>
-            <span aria-hidden="true">·</span>
-            <span>{db.settings.subsidiaryCompanyName}</span>
-            <span aria-hidden="true">·</span>
-            <span className="text-sky-800 font-bold">{db.settings.areaName}</span>
-            <span aria-hidden="true">·</span>
-            <span className="tabular-nums">المحاضر: {db.reports.length}</span>
-            <span aria-hidden="true">·</span>
-            <span className="tabular-nums">المستلمون: {db.recipients.length}</span>
-            <span aria-hidden="true">·</span>
-            <span className="tabular-nums">الإدارات: {db.departments.length}</span>
-          </div>
+        {/* Editor Toolbar (Only in Editor Tab) */}
+        {activeTab === 'editor' && (
+          <div className="mb-4 bg-white border border-slate-200/90 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+            {/* Active Document Status Indicator */}
+            <div className="flex items-center gap-2.5">
+              <span
+                className={`text-xs font-black px-2.5 py-1 rounded-md ${
+                  activeReport.reportType === 'transfer'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : 'bg-sky-100 text-sky-800 border border-sky-300'
+                }`}
+              >
+                {activeReport.reportType === 'transfer' ? 'إذن مناقيل' : 'محضر استلام'}
+              </span>
+              <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                <span>رقم:</span>
+                <span className="font-mono-num font-black text-[#081c30]">
+                  {activeReport.reportNumber}
+                </span>
+              </div>
+              <span className="text-slate-300 hidden sm:inline">|</span>
+              <div className="text-xs text-slate-600 hidden sm:flex items-center gap-1">
+                <span className="text-slate-500">الحالة:</span>
+                <span className="font-bold text-slate-800">{activeReport.status}</span>
+              </div>
+            </div>
 
-          {activeTab === 'editor' && (
+            {/* View Mode Switcher and Save */}
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 p-1 bg-slate-200/80 rounded-lg">
+              <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg border border-slate-200">
                 <button
                   type="button"
                   onClick={() => setEditorViewMode('split')}
@@ -1033,14 +1185,14 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleSaveReport}
-                className="px-4 py-1.5 text-xs font-bold text-emerald-900 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5"
+                className="px-3.5 py-1.5 text-xs font-bold text-emerald-900 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5 shadow-2xs"
               >
-                <Save className="w-3.5 h-3.5" />
+                <Save className="w-3.5 h-3.5 text-emerald-700" />
                 <span>حفظ بقاعدة البيانات</span>
               </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* ==================== TAB 1: REPORT BUILDER & PREVIEW ==================== */}
         {activeTab === 'editor' && (
@@ -1222,11 +1374,13 @@ export default function App() {
                   </div>
                 </section>
 
-                {/* Section 2: Flexible Recipient & Department Input */}
+                {/* Section 2: Parties Input (Transfer or Single Recipient) */}
                 <section className="space-y-4 pt-2">
                   <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
                     <h2 className="text-base font-bold text-slate-900">
-                      02. بيانات المستلم والإدارة التابعة (إدخال مرن أو من الدليل)
+                      {currentReport.reportType === 'transfer'
+                        ? '02. أطراف محضر إذن المناقيل (الطرف المُسلِّم والطرف المُستلِم)'
+                        : '02. بيانات المستلم والإدارة التابعة (إدخال مرن أو من الدليل)'}
                     </h2>
                     <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer select-none">
                       <input
@@ -1239,184 +1393,659 @@ export default function App() {
                     </label>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Flexible Recipient Name Input with Smart Search Dropdown */}
-                    <div className="relative">
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-bold text-slate-700">
-                          اسم المستلم (اكتب أي اسم أو اختر من القائمة)
+                  {currentReport.reportType === 'transfer' ? (
+                    <div className="space-y-4">
+                      {/* Reason for Transfer with Quick Suggestions */}
+                      <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3.5 space-y-2">
+                        <label className="block text-xs font-extrabold text-[#0a2540]">
+                          سبب إجراء المناقلة الرسمية للعهدة والمهمات:
                         </label>
-                        <button
-                          type="button"
-                          onClick={() => setShowRecipientDropdown((v) => !v)}
-                          className="text-[11px] font-bold text-sky-700 hover:underline flex items-center gap-0.5"
-                        >
-                          <span>دليل المستلمين ({db.recipients.length})</span>
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      <input
-                        type="text"
-                        value={currentReport.recipientName}
-                        onFocus={() => setShowRecipientDropdown(true)}
-                        onBlur={() => setTimeout(() => setShowRecipientDropdown(false), 180)}
-                        onChange={(e) =>
-                          setCurrentReport({ ...currentReport, recipientName: e.target.value })
-                        }
-                        placeholder="اكتب اسم المستلم بحرية أو ابحث..."
-                        className="w-full px-3 py-2 text-sm font-bold bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:border-sky-700 focus:bg-white"
-                      />
-
-                      {showRecipientDropdown && filteredRecipients.length > 0 && (
-                        <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-56 overflow-y-auto divide-y divide-slate-100">
-                          {filteredRecipients.map((rec) => (
+                        <input
+                          type="text"
+                          value={currentReport.transferReason || ''}
+                          onChange={(e) =>
+                            setCurrentReport({ ...currentReport, transferReason: e.target.value })
+                          }
+                          placeholder="مثال: إعادة توزيع عهدة ومهمات تشغيلية / نقل موظف / صيانة محطة..."
+                          className="w-full px-3 py-2 text-sm font-semibold bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-700"
+                        />
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          <span className="text-[11px] font-bold text-slate-600">اقتراحات سريعة:</span>
+                          {[
+                            'إعادة توزيع عهدة ومهمات تشغيلية',
+                            'نقل موظف لقسم أو موقع آخر',
+                            'صيانة وتشغيل محطة/شبكة',
+                            'استبدال عهدة متهالكة بجديدة',
+                            'إخلاء طرف وتسليم للبديل',
+                          ].map((reason) => (
                             <button
-                              key={rec.id}
+                              key={reason}
                               type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                setCurrentReport({
-                                  ...currentReport,
-                                  recipientName: rec.name,
-                                  recipientJobTitle: rec.jobTitle || currentReport.recipientJobTitle,
-                                  departmentName:
-                                    rec.departmentName || currentReport.departmentName,
-                                  recipientEmployeeCode: rec.employeeCode,
-                                  recipientNationalId: rec.nationalId,
-                                });
-                                setShowRecipientDropdown(false);
-                              }}
-                              className="w-full text-right px-3 py-2 hover:bg-sky-50 transition-colors flex items-center justify-between gap-2"
+                              onClick={() =>
+                                setCurrentReport({ ...currentReport, transferReason: reason })
+                              }
+                              className="px-2 py-0.5 rounded text-[10.5px] font-semibold bg-white hover:bg-sky-100 text-sky-800 border border-sky-200 transition-colors"
                             >
-                              <div>
-                                <div className="text-xs font-bold text-slate-900">{rec.name}</div>
-                                <div className="text-[11px] text-slate-500">
-                                  {rec.jobTitle} · {rec.departmentName}
-                                </div>
-                              </div>
-                              {rec.employeeCode && (
-                                <span className="text-[11px] font-mono-num text-slate-400">
-                                  #{rec.employeeCode}
-                                </span>
-                              )}
+                              {reason}
                             </button>
                           ))}
                         </div>
-                      )}
-                    </div>
-
-                    {/* Recipient Job Title */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-bold text-slate-700">
-                          الصفة الوظيفية للمستلم (اختياري)
-                        </label>
-                        <label className="inline-flex items-center gap-1 text-[11px] text-slate-600 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={db.settings.showRecipientJobTitleInPrint}
-                            onChange={(e) =>
-                              syncDatabase({
-                                ...db,
-                                settings: {
-                                  ...db.settings,
-                                  showRecipientJobTitleInPrint: e.target.checked,
-                                },
-                              })
-                            }
-                            className="rounded border-slate-300 text-sky-700"
-                          />
-                          <span>إظهار بالطباعة</span>
-                        </label>
                       </div>
-                      <input
-                        type="text"
-                        value={currentReport.recipientJobTitle}
-                        onChange={(e) =>
-                          setCurrentReport({
-                            ...currentReport,
-                            recipientJobTitle: e.target.value,
-                          })
-                        }
-                        placeholder="مثال: مهندس تشغيل / فني شبكات..."
-                        className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:border-sky-700 focus:bg-white"
-                      />
-                    </div>
 
-                    {/* Flexible Department Selector */}
-                    <div className="relative sm:col-span-2">
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-bold text-slate-700">
-                          الإدارة التابعة (اختر من إدارات منطقة مياه دسوق أو اكتب مباشرة)
-                        </label>
+                      {/* Deliverer & Recipient Cards Container */}
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
+                        {/* 1. Deliverer Card (المُسلِّم) */}
+                        <div className="lg:col-span-6 bg-rose-50/40 border-2 border-rose-200 rounded-xl p-4 space-y-3">
+                          <div className="flex items-center justify-between pb-2 border-b border-rose-200">
+                            <span className="flex items-center gap-1.5 font-extrabold text-xs text-rose-900">
+                              <span className="w-2.5 h-2.5 rounded-full bg-rose-600 inline-block"></span>
+                              <span>الطرف الأول: المُسَلِّم (المتنازل عن العهدة)</span>
+                            </span>
+                            <span className="text-[10.5px] text-rose-700 font-bold bg-rose-100 px-2 py-0.5 rounded-full">
+                              مُسلِّم العهدة
+                            </span>
+                          </div>
+
+                          {/* Deliverer Name with Autocomplete */}
+                          <div className="relative">
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-xs font-bold text-slate-700">
+                                اسم المسلّم (من الدليل أو كتابة مباشرة)
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => setShowDelivererDropdown((v) => !v)}
+                                className="text-[11px] font-bold text-rose-700 hover:underline flex items-center gap-0.5"
+                              >
+                                <span>دليل العاملين ({db.recipients.length})</span>
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <input
+                              type="text"
+                              value={currentReport.delivererName || ''}
+                              onFocus={() => setShowDelivererDropdown(true)}
+                              onBlur={() => setTimeout(() => setShowDelivererDropdown(false), 180)}
+                              onChange={(e) =>
+                                setCurrentReport({ ...currentReport, delivererName: e.target.value })
+                              }
+                              placeholder="اكتب اسم المسلّم أو اختر من الدليل..."
+                              className="w-full px-3 py-2 text-sm font-bold bg-white border border-rose-200 rounded-lg focus:outline-none focus:border-rose-600"
+                            />
+
+                            {showDelivererDropdown && filteredDeliverers.length > 0 && (
+                              <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-52 overflow-y-auto divide-y divide-slate-100">
+                                {filteredDeliverers.map((rec) => (
+                                  <button
+                                    key={`del-${rec.id}`}
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      setCurrentReport({
+                                        ...currentReport,
+                                        delivererName: rec.name,
+                                        delivererJobTitle: rec.jobTitle || currentReport.delivererJobTitle,
+                                        delivererDepartmentName:
+                                          rec.departmentName || currentReport.delivererDepartmentName,
+                                        delivererEmployeeCode: rec.employeeCode,
+                                        delivererNationalId: rec.nationalId,
+                                      });
+                                      setShowDelivererDropdown(false);
+                                    }}
+                                    className="w-full text-right px-3 py-2 hover:bg-rose-50 transition-colors flex items-center justify-between gap-2"
+                                  >
+                                    <div>
+                                      <div className="text-xs font-bold text-slate-900">{rec.name}</div>
+                                      <div className="text-[11px] text-slate-500">
+                                        {rec.jobTitle} · {rec.departmentName}
+                                      </div>
+                                    </div>
+                                    {rec.employeeCode && (
+                                      <span className="text-[11px] font-mono-num text-slate-400">
+                                        #{rec.employeeCode}
+                                      </span>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Deliverer Job Title */}
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              وظيفة المسلّم / الصفة
+                            </label>
+                            <input
+                              type="text"
+                              value={currentReport.delivererJobTitle || ''}
+                              onChange={(e) =>
+                                setCurrentReport({ ...currentReport, delivererJobTitle: e.target.value })
+                              }
+                              placeholder="مثال: فني تشغيل / مهندس شبكات..."
+                              className="w-full px-3 py-2 text-sm bg-white border border-rose-200 rounded-lg focus:outline-none focus:border-rose-600"
+                            />
+                          </div>
+
+                          {/* Deliverer Department */}
+                          <div className="relative">
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-xs font-bold text-slate-700">
+                                الإدارة التابعة للمسلّم (الموقع السابق)
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => setShowDelivererDeptDropdown((v) => !v)}
+                                className="text-[11px] font-bold text-rose-700 hover:underline flex items-center gap-0.5"
+                              >
+                                <span>الإدارات ({db.departments.length})</span>
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <input
+                              type="text"
+                              value={currentReport.delivererDepartmentName || ''}
+                              onFocus={() => setShowDelivererDeptDropdown(true)}
+                              onBlur={() => setTimeout(() => setShowDelivererDeptDropdown(false), 180)}
+                              onChange={(e) =>
+                                setCurrentReport({
+                                  ...currentReport,
+                                  delivererDepartmentName: e.target.value,
+                                })
+                              }
+                              placeholder="مثال: إدارة شبكات مياه دسوق..."
+                              className="w-full px-3 py-2 text-sm font-bold bg-white border border-rose-200 rounded-lg focus:outline-none focus:border-rose-600"
+                            />
+
+                            {showDelivererDeptDropdown && filteredDelivererDepartments.length > 0 && (
+                              <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
+                                {filteredDelivererDepartments.map((dept) => (
+                                  <button
+                                    key={`del-dept-${dept.id}`}
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      setCurrentReport({
+                                        ...currentReport,
+                                        delivererDepartmentName: dept.name,
+                                      });
+                                      setShowDelivererDeptDropdown(false);
+                                    }}
+                                    className="w-full text-right px-3 py-2 hover:bg-rose-50 transition-colors flex items-center justify-between"
+                                  >
+                                    <span className="text-xs font-bold text-slate-900">{dept.name}</span>
+                                    <span className="text-[11px] font-mono-num text-slate-400">
+                                      {dept.code}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                              {db.departments.slice(0, 4).map((dept) => (
+                                <button
+                                  key={`quick-del-${dept.id}`}
+                                  type="button"
+                                  onClick={() =>
+                                    setCurrentReport({
+                                      ...currentReport,
+                                      delivererDepartmentName: dept.name,
+                                    })
+                                  }
+                                  className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors whitespace-nowrap ${
+                                    currentReport.delivererDepartmentName === dept.name
+                                      ? 'bg-rose-700 text-white'
+                                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-rose-100'
+                                  }`}
+                                >
+                                  {dept.name}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Code and National ID for Deliverer */}
+                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                                كود الموظف
+                              </label>
+                              <input
+                                type="text"
+                                value={currentReport.delivererEmployeeCode || ''}
+                                onChange={(e) =>
+                                  setCurrentReport({
+                                    ...currentReport,
+                                    delivererEmployeeCode: e.target.value,
+                                  })
+                                }
+                                placeholder="مثال: 10482"
+                                className="w-full px-2.5 py-1.5 text-xs font-mono-num bg-white border border-rose-200 rounded-md"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                                الرقم القومي
+                              </label>
+                              <input
+                                type="text"
+                                value={currentReport.delivererNationalId || ''}
+                                onChange={(e) =>
+                                  setCurrentReport({
+                                    ...currentReport,
+                                    delivererNationalId: e.target.value,
+                                  })
+                                }
+                                placeholder="14 رقم"
+                                className="w-full px-2.5 py-1.5 text-xs font-mono-num bg-white border border-rose-200 rounded-md"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 2. Recipient Card (المُستلِم) */}
+                        <div className="lg:col-span-6 bg-emerald-50/40 border-2 border-emerald-200 rounded-xl p-4 space-y-3">
+                          <div className="flex items-center justify-between pb-2 border-b border-emerald-200">
+                            <span className="flex items-center gap-1.5 font-extrabold text-xs text-emerald-900">
+                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block"></span>
+                              <span>الطرف الثاني: المُسْتَلِم (مستلم العهدة الجديد)</span>
+                            </span>
+                            <span className="text-[10.5px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">
+                              مُستلِم العهدة
+                            </span>
+                          </div>
+
+                          {/* Recipient Name with Autocomplete */}
+                          <div className="relative">
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-xs font-bold text-slate-700">
+                                اسم المستلم (من الدليل أو كتابة مباشرة)
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => setShowRecipientDropdown((v) => !v)}
+                                className="text-[11px] font-bold text-emerald-700 hover:underline flex items-center gap-0.5"
+                              >
+                                <span>دليل العاملين ({db.recipients.length})</span>
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <input
+                              type="text"
+                              value={currentReport.recipientName}
+                              onFocus={() => setShowRecipientDropdown(true)}
+                              onBlur={() => setTimeout(() => setShowRecipientDropdown(false), 180)}
+                              onChange={(e) =>
+                                setCurrentReport({ ...currentReport, recipientName: e.target.value })
+                              }
+                              placeholder="اكتب اسم المستلم أو اختر من الدليل..."
+                              className="w-full px-3 py-2 text-sm font-bold bg-white border border-emerald-200 rounded-lg focus:outline-none focus:border-emerald-600"
+                            />
+
+                            {showRecipientDropdown && filteredRecipients.length > 0 && (
+                              <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-52 overflow-y-auto divide-y divide-slate-100">
+                                {filteredRecipients.map((rec) => (
+                                  <button
+                                    key={`rec-trans-${rec.id}`}
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      setCurrentReport({
+                                        ...currentReport,
+                                        recipientName: rec.name,
+                                        recipientJobTitle: rec.jobTitle || currentReport.recipientJobTitle,
+                                        departmentName:
+                                          rec.departmentName || currentReport.departmentName,
+                                        recipientEmployeeCode: rec.employeeCode,
+                                        recipientNationalId: rec.nationalId,
+                                      });
+                                      setShowRecipientDropdown(false);
+                                    }}
+                                    className="w-full text-right px-3 py-2 hover:bg-emerald-50 transition-colors flex items-center justify-between gap-2"
+                                  >
+                                    <div>
+                                      <div className="text-xs font-bold text-slate-900">{rec.name}</div>
+                                      <div className="text-[11px] text-slate-500">
+                                        {rec.jobTitle} · {rec.departmentName}
+                                      </div>
+                                    </div>
+                                    {rec.employeeCode && (
+                                      <span className="text-[11px] font-mono-num text-slate-400">
+                                        #{rec.employeeCode}
+                                      </span>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Recipient Job Title */}
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              وظيفة المستلم / الصفة
+                            </label>
+                            <input
+                              type="text"
+                              value={currentReport.recipientJobTitle}
+                              onChange={(e) =>
+                                setCurrentReport({
+                                  ...currentReport,
+                                  recipientJobTitle: e.target.value,
+                                })
+                              }
+                              placeholder="مثال: فني أول تشغيل محطات..."
+                              className="w-full px-3 py-2 text-sm bg-white border border-emerald-200 rounded-lg focus:outline-none focus:border-emerald-600"
+                            />
+                          </div>
+
+                          {/* Recipient Department */}
+                          <div className="relative">
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-xs font-bold text-slate-700">
+                                الإدارة التابعة للمستلم (الموقع الجديد)
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => setShowDeptDropdown((v) => !v)}
+                                className="text-[11px] font-bold text-emerald-700 hover:underline flex items-center gap-0.5"
+                              >
+                                <span>الإدارات ({db.departments.length})</span>
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <input
+                              type="text"
+                              value={currentReport.departmentName}
+                              onFocus={() => setShowDeptDropdown(true)}
+                              onBlur={() => setTimeout(() => setShowDeptDropdown(false), 180)}
+                              onChange={(e) =>
+                                setCurrentReport({ ...currentReport, departmentName: e.target.value })
+                              }
+                              placeholder="مثال: إدارة محطات المياه والروافع..."
+                              className="w-full px-3 py-2 text-sm font-bold bg-white border border-emerald-200 rounded-lg focus:outline-none focus:border-emerald-600"
+                            />
+
+                            {showDeptDropdown && filteredDepartments.length > 0 && (
+                              <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
+                                {filteredDepartments.map((dept) => (
+                                  <button
+                                    key={`rec-dept-${dept.id}`}
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      setCurrentReport({
+                                        ...currentReport,
+                                        departmentName: dept.name,
+                                      });
+                                      setShowDeptDropdown(false);
+                                    }}
+                                    className="w-full text-right px-3 py-2 hover:bg-emerald-50 transition-colors flex items-center justify-between"
+                                  >
+                                    <span className="text-xs font-bold text-slate-900">{dept.name}</span>
+                                    <span className="text-[11px] font-mono-num text-slate-400">
+                                      {dept.code}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                              {db.departments.slice(0, 4).map((dept) => (
+                                <button
+                                  key={`quick-rec-${dept.id}`}
+                                  type="button"
+                                  onClick={() =>
+                                    setCurrentReport({ ...currentReport, departmentName: dept.name })
+                                  }
+                                  className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors whitespace-nowrap ${
+                                    currentReport.departmentName === dept.name
+                                      ? 'bg-emerald-700 text-white'
+                                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-emerald-100'
+                                  }`}
+                                >
+                                  {dept.name}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Code and National ID for Recipient */}
+                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                                كود الموظف
+                              </label>
+                              <input
+                                type="text"
+                                value={currentReport.recipientEmployeeCode || ''}
+                                onChange={(e) =>
+                                  setCurrentReport({
+                                    ...currentReport,
+                                    recipientEmployeeCode: e.target.value,
+                                  })
+                                }
+                                placeholder="مثال: 10819"
+                                className="w-full px-2.5 py-1.5 text-xs font-mono-num bg-white border border-emerald-200 rounded-md"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                                الرقم القومي
+                              </label>
+                              <input
+                                type="text"
+                                value={currentReport.recipientNationalId || ''}
+                                onChange={(e) =>
+                                  setCurrentReport({
+                                    ...currentReport,
+                                    recipientNationalId: e.target.value,
+                                  })
+                                }
+                                placeholder="14 رقم"
+                                className="w-full px-2.5 py-1.5 text-xs font-mono-num bg-white border border-emerald-200 rounded-md"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Quick Swap Button */}
+                      <div className="flex justify-center pt-1">
                         <button
                           type="button"
-                          onClick={() => setShowDeptDropdown((v) => !v)}
-                          className="text-[11px] font-bold text-sky-700 hover:underline flex items-center gap-0.5"
+                          onClick={handleSwapDelivererAndRecipient}
+                          className="px-4 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg transition-colors flex items-center gap-2 shadow-xs"
+                          title="عكس بيانات المسلّم والمستلم بضغطة زر واحدة"
                         >
-                          <span>قائمة الإدارات ({db.departments.length})</span>
-                          <ChevronDown className="w-3.5 h-3.5" />
+                          <ArrowLeftRight className="w-4 h-4 text-sky-700" />
+                          <span>تبديل أطراف المناقلة (المسلّم ⇄ المستلم)</span>
                         </button>
                       </div>
+                    </div>
+                  ) : (
+                    /* Normal Single Recipient Form */
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Flexible Recipient Name Input with Smart Search Dropdown */}
+                      <div className="relative">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-bold text-slate-700">
+                            اسم المستلم (اكتب أي اسم أو اختر من القائمة)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setShowRecipientDropdown((v) => !v)}
+                            className="text-[11px] font-bold text-sky-700 hover:underline flex items-center gap-0.5"
+                          >
+                            <span>دليل المستلمين ({db.recipients.length})</span>
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
 
-                      <input
-                        type="text"
-                        value={currentReport.departmentName}
-                        onFocus={() => setShowDeptDropdown(true)}
-                        onBlur={() => setTimeout(() => setShowDeptDropdown(false), 180)}
-                        onChange={(e) =>
-                          setCurrentReport({ ...currentReport, departmentName: e.target.value })
-                        }
-                        placeholder="مثال: إدارة شبكات مياه دسوق / محطة مياه دسوق الرئيسية..."
-                        className="w-full px-3 py-2 text-sm font-bold bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:border-sky-700 focus:bg-white"
-                      />
+                        <input
+                          type="text"
+                          value={currentReport.recipientName}
+                          onFocus={() => setShowRecipientDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowRecipientDropdown(false), 180)}
+                          onChange={(e) =>
+                            setCurrentReport({ ...currentReport, recipientName: e.target.value })
+                          }
+                          placeholder="اكتب اسم المستلم بحرية أو ابحث..."
+                          className="w-full px-3 py-2 text-sm font-bold bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:border-sky-700 focus:bg-white"
+                        />
 
-                      {showDeptDropdown && filteredDepartments.length > 0 && (
-                        <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-52 overflow-y-auto divide-y divide-slate-100">
-                          {filteredDepartments.map((dept) => (
+                        {showRecipientDropdown && filteredRecipients.length > 0 && (
+                          <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-56 overflow-y-auto divide-y divide-slate-100">
+                            {filteredRecipients.map((rec) => (
+                              <button
+                                key={rec.id}
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setCurrentReport({
+                                    ...currentReport,
+                                    recipientName: rec.name,
+                                    recipientJobTitle: rec.jobTitle || currentReport.recipientJobTitle,
+                                    departmentName:
+                                      rec.departmentName || currentReport.departmentName,
+                                    recipientEmployeeCode: rec.employeeCode,
+                                    recipientNationalId: rec.nationalId,
+                                  });
+                                  setShowRecipientDropdown(false);
+                                }}
+                                className="w-full text-right px-3 py-2 hover:bg-sky-50 transition-colors flex items-center justify-between gap-2"
+                              >
+                                <div>
+                                  <div className="text-xs font-bold text-slate-900">{rec.name}</div>
+                                  <div className="text-[11px] text-slate-500">
+                                    {rec.jobTitle} · {rec.departmentName}
+                                  </div>
+                                </div>
+                                {rec.employeeCode && (
+                                  <span className="text-[11px] font-mono-num text-slate-400">
+                                    #{rec.employeeCode}
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Recipient Job Title */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-bold text-slate-700">
+                            الصفة الوظيفية للمستلم (اختياري)
+                          </label>
+                          <label className="inline-flex items-center gap-1 text-[11px] text-slate-600 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={db.settings.showRecipientJobTitleInPrint}
+                              onChange={(e) =>
+                                syncDatabase({
+                                  ...db,
+                                  settings: {
+                                    ...db.settings,
+                                    showRecipientJobTitleInPrint: e.target.checked,
+                                  },
+                                })
+                              }
+                              className="rounded border-slate-300 text-sky-700"
+                            />
+                            <span>إظهار بالطباعة</span>
+                          </label>
+                        </div>
+                        <input
+                          type="text"
+                          value={currentReport.recipientJobTitle}
+                          onChange={(e) =>
+                            setCurrentReport({
+                              ...currentReport,
+                              recipientJobTitle: e.target.value,
+                            })
+                          }
+                          placeholder="مثال: مهندس تشغيل / فني شبكات..."
+                          className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:border-sky-700 focus:bg-white"
+                        />
+                      </div>
+
+                      {/* Flexible Department Selector */}
+                      <div className="relative sm:col-span-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-bold text-slate-700">
+                            الإدارة التابعة (اختر من إدارات منطقة مياه دسوق أو اكتب مباشرة)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setShowDeptDropdown((v) => !v)}
+                            className="text-[11px] font-bold text-sky-700 hover:underline flex items-center gap-0.5"
+                          >
+                            <span>قائمة الإدارات ({db.departments.length})</span>
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <input
+                          type="text"
+                          value={currentReport.departmentName}
+                          onFocus={() => setShowDeptDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowDeptDropdown(false), 180)}
+                          onChange={(e) =>
+                            setCurrentReport({ ...currentReport, departmentName: e.target.value })
+                          }
+                          placeholder="مثال: إدارة شبكات مياه دسوق / محطة مياه دسوق الرئيسية..."
+                          className="w-full px-3 py-2 text-sm font-bold bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:border-sky-700 focus:bg-white"
+                        />
+
+                        {showDeptDropdown && filteredDepartments.length > 0 && (
+                          <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-52 overflow-y-auto divide-y divide-slate-100">
+                            {filteredDepartments.map((dept) => (
+                              <button
+                                key={dept.id}
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setCurrentReport({
+                                    ...currentReport,
+                                    departmentName: dept.name,
+                                  });
+                                  setShowDeptDropdown(false);
+                                }}
+                                className="w-full text-right px-3 py-2 hover:bg-sky-50 transition-colors flex items-center justify-between"
+                              >
+                                <span className="text-xs font-bold text-slate-900">{dept.name}</span>
+                                <span className="text-[11px] font-mono-num text-slate-400">
+                                  {dept.code}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          {db.departments.slice(0, 5).map((dept) => (
                             <button
                               key={dept.id}
                               type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                setCurrentReport({
-                                  ...currentReport,
-                                  departmentName: dept.name,
-                                });
-                                setShowDeptDropdown(false);
-                              }}
-                              className="w-full text-right px-3 py-2 hover:bg-sky-50 transition-colors flex items-center justify-between"
+                              onClick={() =>
+                                setCurrentReport({ ...currentReport, departmentName: dept.name })
+                              }
+                              className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors whitespace-nowrap ${
+                                currentReport.departmentName === dept.name
+                                  ? 'bg-sky-700 text-white'
+                                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                              }`}
                             >
-                              <span className="text-xs font-bold text-slate-900">{dept.name}</span>
-                              <span className="text-[11px] font-mono-num text-slate-400">
-                                {dept.code}
-                              </span>
+                              {dept.name}
                             </button>
                           ))}
                         </div>
-                      )}
-
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        {db.departments.slice(0, 5).map((dept) => (
-                          <button
-                            key={dept.id}
-                            type="button"
-                            onClick={() =>
-                              setCurrentReport({ ...currentReport, departmentName: dept.name })
-                            }
-                            className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors whitespace-nowrap ${
-                              currentReport.departmentName === dept.name
-                                ? 'bg-sky-700 text-white'
-                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                            }`}
-                          >
-                            {dept.name}
-                          </button>
-                        ))}
                       </div>
                     </div>
-                  </div>
+                  )}
                 </section>
 
                 {/* Section 3: Committee Members & Job Titles */}
@@ -2117,11 +2746,62 @@ export default function App() {
 
                   <button
                     type="button"
-                    onClick={handleCreateNewReport}
-                    className="px-4 py-1.5 text-xs font-bold text-white bg-sky-700 hover:bg-sky-800 rounded-lg flex items-center gap-1.5 shadow-xs"
+                    onClick={() => handleCreateNewReport('receipt')}
+                    className="px-3.5 py-1.5 text-xs font-bold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-300 rounded-lg flex items-center gap-1.5 shadow-xs"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-3.5 h-3.5 text-sky-700" />
                     <span>محضر استلام جديد</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleCreateNewReport('transfer')}
+                    className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-emerald-200" />
+                    <span>إذن مناقيل جديد (مسلّم ومستلم)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Report Type Filter Quick Tabs */}
+              <div className="flex flex-wrap items-center gap-2 pt-1 pb-1">
+                <span className="text-xs font-bold text-slate-700">تصفية نوع المستند:</span>
+                <div className="flex items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setFilterReportType('all')}
+                    className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+                      filterReportType === 'all'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    جميع النماذج ({db.reports.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterReportType('receipt')}
+                    className={`px-3 py-1 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 ${
+                      filterReportType === 'receipt'
+                        ? 'bg-sky-700 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>محاضر الاستلام ({receiptReportsCount})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterReportType('transfer')}
+                    className={`px-3 py-1 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 ${
+                      filterReportType === 'transfer'
+                        ? 'bg-emerald-700 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>أذون المناقيل ({transferReportsCount})</span>
                   </button>
                 </div>
               </div>
@@ -2303,25 +2983,72 @@ export default function App() {
                     ) : (
                       filteredArchiveReports.map((rep) => (
                         <tr key={rep.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-3 px-3 font-mono-num font-bold text-sky-900">
-                            {rep.reportNumber}
+                          <td className="py-3 px-3">
+                            {rep.reportType === 'transfer' ||
+                            Boolean(rep.delivererName && rep.delivererName.trim()) ? (
+                              <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded text-[10px] font-extrabold mb-1">
+                                <Share2 className="w-3 h-3 text-emerald-600" />
+                                <span>إذن مناقيل</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 bg-sky-100 text-sky-800 border border-sky-300 px-1.5 py-0.5 rounded text-[10px] font-extrabold mb-1">
+                                <FileText className="w-3 h-3 text-sky-600" />
+                                <span>محضر استلام</span>
+                              </span>
+                            )}
+                            <div className="font-mono-num font-black text-slate-900 text-xs">
+                              {rep.reportNumber}
+                            </div>
                           </td>
                           <td className="py-3 px-3 font-mono-num text-slate-700">
-                            <div>{rep.meetingDate}</div>
+                            <div className="font-bold">{rep.meetingDate}</div>
                             <div className="text-[11px] text-slate-500">يوم {rep.dayName}</div>
                           </td>
                           <td className="py-3 px-3">
-                            <div className="font-bold text-slate-900">
-                              {rep.recipientName || 'غير محدد'}
-                            </div>
-                            {rep.recipientJobTitle && (
-                              <div className="text-[11px] text-slate-500">
-                                {rep.recipientJobTitle}
+                            {rep.reportType === 'transfer' ||
+                            Boolean(rep.delivererName && rep.delivererName.trim()) ? (
+                              <div className="space-y-1">
+                                <div className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block"></span>
+                                  <span className="text-slate-500">المُسلِّم:</span>
+                                  <span className="font-bold text-slate-900">
+                                    {rep.delivererName || '—'}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                                  <span className="text-slate-500">المُستلِم:</span>
+                                  <span className="font-bold text-slate-900">
+                                    {rep.recipientName || '—'}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <div className="font-bold text-slate-900">
+                                  {rep.recipientName || 'غير محدد'}
+                                </div>
+                                {rep.recipientJobTitle && (
+                                  <div className="text-[11px] text-slate-500">
+                                    {rep.recipientJobTitle}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </td>
                           <td className="py-3 px-3 font-semibold text-slate-800">
-                            {rep.departmentName || '—'}
+                            {rep.reportType === 'transfer' && rep.delivererDepartmentName ? (
+                              <div className="space-y-0.5 text-[11px]">
+                                <div className="text-slate-500 truncate max-w-[150px]">
+                                  من: {rep.delivererDepartmentName}
+                                </div>
+                                <div className="text-slate-900 font-bold truncate max-w-[150px]">
+                                  إلى: {rep.departmentName || '—'}
+                                </div>
+                              </div>
+                            ) : (
+                              rep.departmentName || '—'
+                            )}
                           </td>
                           <td className="py-3 px-3 max-w-[240px]">
                             <div className="font-semibold text-slate-900 truncate">
@@ -2434,285 +3161,497 @@ export default function App() {
 
         {/* ==================== TAB 3: RECIPIENTS & DEPARTMENTS ==================== */}
         {activeTab === 'recipients' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-              <div className="border-b border-slate-200 pb-3">
-                <h2 className="text-base font-bold text-slate-900">
-                  دليل المستلمين والموظفين ({db.recipients.length})
-                </h2>
-                <p className="text-xs text-slate-500">
-                  سجل بيانات العاملين لسرعة اختيارهم وتعبئة بيانات العهدة والإدارة تلقائياً
-                </p>
-              </div>
-
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-3">
-                <div className="text-xs font-bold text-slate-800">إضافة مستلم جديد:</div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <input
-                    type="text"
-                    value={newRecipient.name}
-                    onChange={(e) => setNewRecipient({ ...newRecipient, name: e.target.value })}
-                    placeholder="الاسم رباعي *"
-                    className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md font-semibold"
-                  />
-                  <input
-                    type="text"
-                    value={newRecipient.jobTitle}
-                    onChange={(e) =>
-                      setNewRecipient({ ...newRecipient, jobTitle: e.target.value })
-                    }
-                    placeholder="الصفة الوظيفية"
-                    className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
-                  />
-                  <input
-                    type="text"
-                    list="dept-datalist"
-                    value={newRecipient.departmentName}
-                    onChange={(e) =>
-                      setNewRecipient({ ...newRecipient, departmentName: e.target.value })
-                    }
-                    placeholder="الإدارة التابعة"
-                    className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
-                  />
-                  <input
-                    type="text"
-                    value={newRecipient.employeeCode}
-                    onChange={(e) =>
-                      setNewRecipient({ ...newRecipient, employeeCode: e.target.value })
-                    }
-                    placeholder="الرقم الوظيفي"
-                    className="px-3 py-1.5 text-xs font-mono-num bg-white border border-slate-300 rounded-md"
-                  />
-                  <input
-                    type="text"
-                    value={newRecipient.nationalId}
-                    onChange={(e) =>
-                      setNewRecipient({ ...newRecipient, nationalId: e.target.value })
-                    }
-                    placeholder="الرقم القومي (اختياري)"
-                    className="px-3 py-1.5 text-xs font-mono-num bg-white border border-slate-300 rounded-md"
-                  />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!newRecipient.name.trim()) return;
-                      const rec: RecipientRecord = {
-                        ...newRecipient,
-                        id: `rec-${Date.now()}`,
-                        name: newRecipient.name.trim(),
-                      };
-                      await syncDatabase(
-                        { ...db, recipients: [rec, ...db.recipients] },
-                        `تمت إضافة "${rec.name}" إلى دليل المستلمين`
-                      );
-                      setNewRecipient({
-                        name: '',
-                        jobTitle: '',
-                        departmentName: '',
-                        employeeCode: '',
-                        nationalId: '',
-                        phone: '',
-                      });
-                    }}
-                    className="px-3 py-1.5 text-xs font-bold text-white bg-sky-700 hover:bg-sky-800 rounded-md flex items-center justify-center gap-1"
-                  >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    <span>حفظ المستلم بالدليل</span>
-                  </button>
+          <div className="space-y-6">
+            {/* Top Directory Executive Header */}
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-800 flex items-center justify-center font-bold">
+                    <Users className="w-5 h-5 text-sky-700" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-slate-900">
+                      دليل المستلمين والموظفين ({db.recipients.length} موظفاً · {db.departments.length} إدارات)
+                    </h2>
+                    <p className="text-xs text-slate-500 font-medium">
+                      السجل المعتمد لبيانات العاملين بمنطقة مياه دسوق ومحطاتها لسرعة التعبئة وإصدار محاضر الاستلام وأذون المناقيل
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <datalist id="dept-datalist">
-                {db.departments.map((d) => (
-                  <option key={d.id} value={d.name} />
-                ))}
-              </datalist>
-
-              <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                <table className="w-full text-right text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
-                      <th className="py-2.5 px-3">اسم المستلم</th>
-                      <th className="py-2.5 px-3">الصفة الوظيفية</th>
-                      <th className="py-2.5 px-3">الإدارة التابعة</th>
-                      <th className="py-2.5 px-3">المحاضر</th>
-                      <th className="py-2.5 px-3 text-center">إجراء</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {db.recipients.map((rec) => {
-                      const count = db.reports.filter(
-                        (r) => r.recipientName.trim() === rec.name.trim()
-                      ).length;
-                      return (
-                        <tr key={rec.id} className="hover:bg-slate-50">
-                          <td className="py-2.5 px-3 font-bold text-slate-900">
-                            <div>{rec.name}</div>
-                            {rec.employeeCode && (
-                              <div className="text-[10px] font-mono-num text-slate-400">
-                                كود: {rec.employeeCode}
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-700">{rec.jobTitle || '—'}</td>
-                          <td className="py-2.5 px-3 font-semibold text-slate-800">
-                            {rec.departmentName || '—'}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono-num font-bold text-sky-800">
-                            {count} محضر
-                          </td>
-                          <td className="py-2.5 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setCurrentReport({
-                                    ...currentReport,
-                                    recipientName: rec.name,
-                                    recipientJobTitle: rec.jobTitle,
-                                    departmentName: rec.departmentName,
-                                    recipientEmployeeCode: rec.employeeCode,
-                                    recipientNationalId: rec.nationalId,
-                                  });
-                                  setActiveTab('editor');
-                                  showToast(`تم اختيار المستلم "${rec.name}" في المحضر الحالي`);
-                                }}
-                                className="px-2 py-1 text-[11px] font-bold bg-sky-50 text-sky-800 hover:bg-sky-100 rounded border border-sky-200"
-                              >
-                                إدراج بمحضر
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  syncDatabase(
-                                    {
-                                      ...db,
-                                      recipients: db.recipients.filter((r) => r.id !== rec.id),
-                                    },
-                                    'تم حذف المستلم من الدليل'
-                                  )
-                                }
-                                className="p-1 text-rose-600 hover:bg-rose-50 rounded"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              {/* Action: Reload / Restore Full Directory (20 employees & 10 departments) */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await syncDatabase(
+                      {
+                        ...db,
+                        recipients: DEFAULT_DATABASE.recipients,
+                        departments: DEFAULT_DATABASE.departments,
+                      },
+                      'تم تحديث واستعادة الدليل الرسمي لكافة العاملين (20 موظفاً و10 إدارات)'
+                    );
+                  }}
+                  className="px-3.5 py-2 text-xs font-bold text-sky-900 bg-sky-50 hover:bg-sky-100 active:bg-sky-200 border border-sky-300 rounded-xl transition-colors flex items-center gap-1.5 shadow-2xs"
+                  title="استعادة وتعبئة السجل الكامل للموظفين والإدارات"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-sky-700" />
+                  <span>تحديث واستعادة الدليل الشامل (20 موظفاً)</span>
+                </button>
               </div>
             </div>
 
-            {/* Departments */}
-            <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-              <div className="border-b border-slate-200 pb-3">
-                <h2 className="text-base font-bold text-slate-900">
-                  الإدارات والمحطات التابعة ({db.departments.length})
-                </h2>
-                <p className="text-xs text-slate-500">
-                  الهيكل الإداري والمحطات التابعة لمنطقة مياه دسوق
-                </p>
-              </div>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Employees / Recipients Directory Column (8 of 12) */}
+              <div className="lg:col-span-8 bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      قائمة الموظفين والمستلمين
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      عرض {filteredDirectoryRecipients.length} من أصل {db.recipients.length} موظفاً مسجلاً
+                    </p>
+                  </div>
 
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-2.5">
-                <div className="text-xs font-bold text-slate-800">إضافة إدارة جديدة:</div>
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    value={newDepartment.name}
-                    onChange={(e) =>
-                      setNewDepartment({ ...newDepartment, name: e.target.value })
-                    }
-                    placeholder="اسم الإدارة التابعة *"
-                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md font-semibold"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
+                  {/* Search and Dept Filter Toolbar */}
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="relative flex-1 sm:w-64">
+                      <Search className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-400" />
+                      <input
+                        type="text"
+                        value={recipientSearchQuery}
+                        onChange={(e) => setRecipientSearchQuery(e.target.value)}
+                        placeholder="بحث بالاسم، الكود، الرقم القومي..."
+                        className="w-full pr-8 pl-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden focus:border-sky-500 transition-colors"
+                      />
+                      {recipientSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setRecipientSearchQuery('')}
+                          className="absolute left-2.5 top-2 text-slate-400 hover:text-slate-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    <select
+                      value={recipientDeptFilter}
+                      onChange={(e) => setRecipientDeptFilter(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden font-medium"
+                    >
+                      <option value="all">كل الإدارات</option>
+                      {db.departments.map((d) => (
+                        <option key={d.id} value={d.name}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Add New Recipient Form */}
+                <div className="bg-slate-50/90 border border-slate-200/90 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <UserPlus className="w-3.5 h-3.5 text-sky-700" />
+                      <span>إضافة موظف جديد للدليل:</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <input
                       type="text"
-                      value={newDepartment.managerName}
-                      onChange={(e) =>
-                        setNewDepartment({ ...newDepartment, managerName: e.target.value })
-                      }
-                      placeholder="اسم مدير الإدارة (اختياري)"
-                      className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
+                      value={newRecipient.name}
+                      onChange={(e) => setNewRecipient({ ...newRecipient, name: e.target.value })}
+                      placeholder="الاسم رباعي *"
+                      className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-semibold"
                     />
                     <input
                       type="text"
-                      value={newDepartment.code}
+                      value={newRecipient.jobTitle}
                       onChange={(e) =>
-                        setNewDepartment({ ...newDepartment, code: e.target.value })
+                        setNewRecipient({ ...newRecipient, jobTitle: e.target.value })
                       }
-                      placeholder="كود الإدارة"
-                      className="px-3 py-1.5 text-xs font-mono-num bg-white border border-slate-300 rounded-md"
+                      placeholder="الصفة الوظيفية"
+                      className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
+                    />
+                    <input
+                      type="text"
+                      list="dept-datalist"
+                      value={newRecipient.departmentName}
+                      onChange={(e) =>
+                        setNewRecipient({ ...newRecipient, departmentName: e.target.value })
+                      }
+                      placeholder="الإدارة التابعة"
+                      className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
+                    />
+                    <input
+                      type="text"
+                      value={newRecipient.employeeCode}
+                      onChange={(e) =>
+                        setNewRecipient({ ...newRecipient, employeeCode: e.target.value })
+                      }
+                      placeholder="الرقم الوظيفي"
+                      className="px-3 py-1.5 text-xs font-mono-num bg-white border border-slate-300 rounded-lg"
+                    />
+                    <input
+                      type="text"
+                      value={newRecipient.nationalId}
+                      onChange={(e) =>
+                        setNewRecipient({ ...newRecipient, nationalId: e.target.value })
+                      }
+                      placeholder="الرقم القومي (14 رقم)"
+                      className="px-3 py-1.5 text-xs font-mono-num bg-white border border-slate-300 rounded-lg"
+                    />
+                    <input
+                      type="text"
+                      value={newRecipient.phone}
+                      onChange={(e) =>
+                        setNewRecipient({ ...newRecipient, phone: e.target.value })
+                      }
+                      placeholder="رقم الهاتف المحمول"
+                      className="px-3 py-1.5 text-xs font-mono-num bg-white border border-slate-300 rounded-lg"
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!newDepartment.name.trim()) return;
-                      const dept: DepartmentRecord = {
-                        ...newDepartment,
-                        id: `dept-${Date.now()}`,
-                        name: newDepartment.name.trim(),
-                        code: newDepartment.code || `DSQ-0${db.departments.length + 1}`,
-                      };
-                      await syncDatabase(
-                        { ...db, departments: [dept, ...db.departments] },
-                        `تمت إضافة "${dept.name}" إلى قاعدة البيانات`
-                      );
-                      setNewDepartment({
-                        name: '',
-                        managerName: '',
-                        location: 'منطقة مياه دسوق',
-                        code: '',
-                      });
-                    }}
-                    className="w-full py-1.5 text-xs font-bold text-white bg-sky-700 hover:bg-sky-800 rounded-md flex items-center justify-center gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>إضافة الإدارة التابعة</span>
-                  </button>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!newRecipient.name.trim()) return;
+                        const rec: RecipientRecord = {
+                          ...newRecipient,
+                          id: `rec-${Date.now()}`,
+                          name: newRecipient.name.trim(),
+                        };
+                        await syncDatabase(
+                          { ...db, recipients: [rec, ...db.recipients] },
+                          `تمت إضافة الموظف "${rec.name}" إلى دليل العاملين`
+                        );
+                        setNewRecipient({
+                          name: '',
+                          jobTitle: '',
+                          departmentName: '',
+                          employeeCode: '',
+                          nationalId: '',
+                          phone: '',
+                        });
+                      }}
+                      className="px-4 py-1.5 text-xs font-bold text-white bg-sky-700 hover:bg-sky-800 rounded-lg flex items-center justify-center gap-1.5 shadow-2xs"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>حفظ الموظف بالدليل</span>
+                    </button>
+                  </div>
+                </div>
+
+                <datalist id="dept-datalist">
+                  {db.departments.map((d) => (
+                    <option key={d.id} value={d.name} />
+                  ))}
+                </datalist>
+
+                {/* Employees Table */}
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-right text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
+                        <th className="py-2.5 px-3">الموظف والكود</th>
+                        <th className="py-2.5 px-3">الصفة الوظيفية</th>
+                        <th className="py-2.5 px-3">الإدارة ومقر العمل</th>
+                        <th className="py-2.5 px-3">الرقم القومي / الهاتف</th>
+                        <th className="py-2.5 px-3 text-center">المحاضر</th>
+                        <th className="py-2.5 px-3 text-center min-w-[210px]">إجراءات سريعة</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {filteredDirectoryRecipients.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-slate-500">
+                            لا توجد بيانات موظفين تطابق بحثك. اضغط على «تحديث واستعادة الدليل الشامل».
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredDirectoryRecipients.map((rec) => {
+                          const count = db.reports.filter(
+                            (r) =>
+                              r.recipientName.trim() === rec.name.trim() ||
+                              (r.delivererName && r.delivererName.trim() === rec.name.trim())
+                          ).length;
+                          return (
+                            <tr key={rec.id} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="py-2.5 px-3">
+                                <div className="font-bold text-slate-900">{rec.name}</div>
+                                {rec.employeeCode && (
+                                  <div className="text-[10.5px] font-mono-num text-sky-800 font-semibold">
+                                    كود: {rec.employeeCode}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-700 font-medium">
+                                {rec.jobTitle || '—'}
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span className="inline-block bg-slate-100 text-slate-800 px-2 py-0.5 rounded text-[11px] font-semibold border border-slate-200">
+                                  {rec.departmentName || '—'}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-[11px] font-mono-num">
+                                <div className="text-slate-800 font-medium">
+                                  {rec.nationalId || '—'}
+                                </div>
+                                {rec.phone && (
+                                  <div className="text-slate-500 flex items-center gap-1 text-[10px]">
+                                    <Phone className="w-2.5 h-2.5 text-slate-400" />
+                                    <span>{rec.phone}</span>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 text-center font-mono-num font-bold text-sky-900">
+                                {count}
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                <div className="flex items-center justify-center gap-1 flex-wrap">
+                                  {/* Insert as recipient in current opened report */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCurrentReport({
+                                        ...currentReport,
+                                        recipientName: rec.name,
+                                        recipientJobTitle: rec.jobTitle,
+                                        departmentName: rec.departmentName,
+                                        recipientEmployeeCode: rec.employeeCode,
+                                        recipientNationalId: rec.nationalId,
+                                      });
+                                      setActiveTab('editor');
+                                      showToast(`تم اختيار "${rec.name}" كمستلم في المحضر الحالي`);
+                                    }}
+                                    className="px-2 py-1 text-[10.5px] font-bold bg-sky-50 text-sky-800 hover:bg-sky-100 rounded border border-sky-200"
+                                    title="إدراج كمُستلِم في المحضر الحالي المفتوح"
+                                  >
+                                    مُستلِم
+                                  </button>
+
+                                  {/* Insert as deliverer in current opened report */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCurrentReport({
+                                        ...currentReport,
+                                        reportType: 'transfer',
+                                        delivererName: rec.name,
+                                        delivererJobTitle: rec.jobTitle,
+                                        delivererDepartmentName: rec.departmentName,
+                                        delivererEmployeeCode: rec.employeeCode,
+                                        delivererNationalId: rec.nationalId,
+                                      });
+                                      setActiveTab('editor');
+                                      showToast(`تم اختيار "${rec.name}" كطرف مُسلِّم في إذن المناقيل الحالي`);
+                                    }}
+                                    className="px-2 py-1 text-[10.5px] font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 rounded border border-emerald-200"
+                                    title="إدراج كطرف مُسلِّم في إذن المناقيل الحالي المفتوح"
+                                  >
+                                    مُسلِّم
+                                  </button>
+
+                                  {/* Fast create new receipt for this employee */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCreateNewReport('receipt', { recipient: rec })}
+                                    className="px-2 py-1 text-[10.5px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded border border-slate-300"
+                                    title="إنشاء نموذج محضر استلام جديد لهذا الموظف فوراً"
+                                  >
+                                    + استلام
+                                  </button>
+
+                                  {/* Fast create new transfer with this employee as deliverer */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCreateNewReport('transfer', { deliverer: rec })}
+                                    className="px-2 py-1 text-[10.5px] font-bold bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded border border-emerald-300"
+                                    title="إنشاء إذن مناقيل جديد يبدأ من هذا الموظف كمُسلِّم"
+                                  >
+                                    ⇄ مناقيل
+                                  </button>
+
+                                  {/* Delete recipient */}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      syncDatabase(
+                                        {
+                                          ...db,
+                                          recipients: db.recipients.filter((r) => r.id !== rec.id),
+                                        },
+                                        'تم حذف الموظف من الدليل'
+                                      )
+                                    }
+                                    className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                                    title="حذف من الدليل"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
-              <div className="divide-y divide-slate-200 border border-slate-200 rounded-lg">
-                {db.departments.map((dept) => {
-                  const repCount = db.reports.filter(
-                    (r) => r.departmentName.trim() === dept.name.trim()
-                  ).length;
-                  return (
-                    <div
-                      key={dept.id}
-                      className="p-3 hover:bg-slate-50 flex items-center justify-between gap-2"
+              {/* Departments Column (4 of 12) */}
+              <div className="lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
+                <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      الإدارات والمحطات التابعة ({db.departments.length})
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      الهيكل الإداري لمنطقة مياه دسوق
+                    </p>
+                  </div>
+                </div>
+
+                {/* Department Search */}
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={departmentSearchQuery}
+                    onChange={(e) => setDepartmentSearchQuery(e.target.value)}
+                    placeholder="بحث في الإدارات والمحطات..."
+                    className="w-full pr-8 pl-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden"
+                  />
+                </div>
+
+                {/* Add New Department Form */}
+                <div className="bg-slate-50/90 border border-slate-200/90 rounded-xl p-3.5 space-y-2.5">
+                  <div className="text-xs font-bold text-slate-800">إضافة إدارة جديدة:</div>
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={newDepartment.name}
+                      onChange={(e) =>
+                        setNewDepartment({ ...newDepartment, name: e.target.value })
+                      }
+                      placeholder="اسم الإدارة التابعة *"
+                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-semibold"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={newDepartment.managerName}
+                        onChange={(e) =>
+                          setNewDepartment({ ...newDepartment, managerName: e.target.value })
+                        }
+                        placeholder="اسم مدير الإدارة"
+                        className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
+                      />
+                      <input
+                        type="text"
+                        value={newDepartment.code}
+                        onChange={(e) =>
+                          setNewDepartment({ ...newDepartment, code: e.target.value })
+                        }
+                        placeholder="كود الإدارة"
+                        className="px-3 py-1.5 text-xs font-mono-num bg-white border border-slate-300 rounded-lg"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!newDepartment.name.trim()) return;
+                        const dept: DepartmentRecord = {
+                          ...newDepartment,
+                          id: `dept-${Date.now()}`,
+                          name: newDepartment.name.trim(),
+                          code: newDepartment.code || `DSQ-0${db.departments.length + 1}`,
+                        };
+                        await syncDatabase(
+                          { ...db, departments: [dept, ...db.departments] },
+                          `تمت إضافة "${dept.name}" إلى قاعدة البيانات`
+                        );
+                        setNewDepartment({
+                          name: '',
+                          managerName: '',
+                          location: 'منطقة مياه دسوق',
+                          code: '',
+                        });
+                      }}
+                      className="w-full py-1.5 text-xs font-bold text-white bg-sky-700 hover:bg-sky-800 rounded-lg flex items-center justify-center gap-1 shadow-2xs"
                     >
-                      <div>
-                        <div className="text-xs font-bold text-slate-900">{dept.name}</div>
-                        <div className="text-[11px] text-slate-500">
-                          {dept.managerName ? `مدير الإدارة: ${dept.managerName} · ` : ''}
-                          <span className="font-mono-num">المحاضر: {repCount}</span>
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>إضافة الإدارة التابعة</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Departments List */}
+                <div className="divide-y divide-slate-200 border border-slate-200 rounded-xl overflow-hidden max-h-[500px] overflow-y-auto">
+                  {filteredDirectoryDepartments.map((dept) => {
+                    const repCount = db.reports.filter(
+                      (r) => r.departmentName.trim() === dept.name.trim()
+                    ).length;
+                    const empCount = db.recipients.filter(
+                      (rec) => rec.departmentName.trim() === dept.name.trim()
+                    ).length;
+                    return (
+                      <div
+                        key={dept.id}
+                        className="p-3 hover:bg-slate-50 flex items-center justify-between gap-2"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-900">{dept.name}</span>
+                            {dept.code && (
+                              <span className="text-[10px] font-mono-num font-bold text-sky-800 bg-sky-50 px-1.5 py-0.2 rounded border border-sky-200">
+                                {dept.code}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            {dept.managerName ? `المدير: ${dept.managerName} · ` : ''}
+                            <span className="font-mono-num">{empCount} موظفاً</span> ·{' '}
+                            <span className="font-mono-num">{repCount} محضر</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setRecipientDeptFilter(dept.name)}
+                            className="px-2 py-1 text-[10.5px] font-bold text-sky-800 bg-sky-50 hover:bg-sky-100 rounded border border-sky-200"
+                            title="فلترة الموظفين التابعين لهذه الإدارة"
+                          >
+                            عرض الموظفين
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              syncDatabase(
+                                {
+                                  ...db,
+                                  departments: db.departments.filter((d) => d.id !== dept.id),
+                                },
+                                'تم حذف الإدارة من الدليل'
+                              )
+                            }
+                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
+                            title="حذف"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          syncDatabase(
-                            {
-                              ...db,
-                              departments: db.departments.filter((d) => d.id !== dept.id),
-                            },
-                            'تم حذف الإدارة من الدليل'
-                          )
-                        }
-                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
