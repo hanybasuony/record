@@ -27,6 +27,13 @@ import {
   ArrowLeftRight,
   RefreshCw,
   Phone,
+  LayoutGrid,
+  List,
+  Briefcase,
+  ShieldCheck,
+  FileSpreadsheet,
+  UserCheck,
+  Check,
 } from 'lucide-react';
 import {
   DatabaseSchema,
@@ -250,6 +257,11 @@ export default function App() {
   const [recipientSearchQuery, setRecipientSearchQuery] = useState('');
   const [recipientDeptFilter, setRecipientDeptFilter] = useState('all');
   const [departmentSearchQuery, setDepartmentSearchQuery] = useState('');
+  const [directorySubTab, setDirectorySubTab] = useState<'employees' | 'departments'>('employees');
+  const [directoryViewMode, setDirectoryViewMode] = useState<'table' | 'cards'>('table');
+  const [isAddRecipientModalOpen, setIsAddRecipientModalOpen] = useState(false);
+  const [isAddDepartmentModalOpen, setIsAddDepartmentModalOpen] = useState(false);
+  const [copiedText, setCopiedText] = useState<string | null>(null);
 
   // Committees & Catalog tab states
   const [newCommitteeMember, setNewCommitteeMember] = useState<Omit<CommitteeMemberRecord, 'id'>>({
@@ -872,109 +884,41 @@ export default function App() {
   return (
     <div dir="rtl" className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
       {/* Top Executive Governmental & Corporate Header */}
-      <header className="no-print sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-sm">
-        {/* Tier 1: Main Bar: Brand Identity, Center Navigation Tabs, and Executive Actions */}
-        <div className="px-4 lg:px-7 py-2.5 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 border-b border-slate-100 lg:border-b-0">
-          
-          {/* Brand & Organization Identity */}
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#081c30] via-[#0b2b4c] to-[#0e3b66] text-white flex items-center justify-center font-black text-xl shadow-md border border-sky-400/20 select-none">
-              <span className="drop-shadow-sm">ع</span>
+      <header className="no-print sticky top-0 z-30 shadow-md">
+        {/* Tier 1: Institutional Authority Bar & Quick Actions */}
+        <div className="bg-gradient-to-r from-[#07192b] via-[#0b2742] to-[#0f3459] text-white px-4 lg:px-8 py-2.5 flex items-center justify-between gap-4 border-b border-sky-950">
+          {/* Institutional Brand */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-sky-400/20 to-sky-600/30 border border-sky-400/40 flex items-center justify-center shadow-inner shrink-0 select-none">
+              <span className="text-xl font-black text-amber-300 drop-shadow-md">ع</span>
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-base sm:text-lg font-black tracking-tight text-[#081c30]">
-                  منظومة عهدتي
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-base sm:text-lg font-black tracking-wide text-white">
+                  منظومة عهدتي الرقمية
                 </span>
-                <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300/80 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full shadow-2xs">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span className="inline-flex items-center gap-1.5 bg-sky-500/20 text-sky-200 border border-sky-400/30 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                   {db.settings.areaName || 'منطقة مياه دسوق'}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 font-bold hidden sm:block">
-                {db.settings.subsidiaryCompanyName || 'شركة مياه الشرب والصرف الصحي بكفر الشيخ'}
+              <p className="text-[11px] text-sky-200/80 font-medium hidden sm:block">
+                {db.settings.subsidiaryCompanyName || 'شركة مياه الشرب والصرف الصحي بكفر الشيخ'} — السجل المعتمد للعهد والمناقيل
               </p>
             </div>
           </div>
 
-          {/* Center: The Navigation Tabs - Desktop Inline */}
-          <nav className="hidden lg:flex items-center gap-1 bg-slate-100/95 p-1 rounded-xl border border-slate-200/90 shadow-inner">
-            {[
-              {
-                id: 'editor',
-                label: 'محرر المحاضر والأذون',
-                icon: FileText,
-                badge: currentReport?.reportType === 'transfer' ? 'مناقيل' : 'استلام',
-                badgeColor:
-                  currentReport?.reportType === 'transfer'
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-sky-600 text-white',
-              },
-              {
-                id: 'archive',
-                label: 'سجل المحاضر والبحث',
-                icon: Search,
-                badge: String(db.reports.length),
-                badgeColor: 'bg-slate-200 text-slate-800',
-              },
-              {
-                id: 'recipients',
-                label: 'دليل المستلمين والموظفين',
-                icon: Users,
-                badge: String(db.recipients.length),
-                badgeColor: 'bg-sky-100 text-sky-900 border border-sky-200',
-              },
-              {
-                id: 'committees',
-                label: 'اللجان وقائمة الأصناف',
-                icon: Package,
-              },
-              {
-                id: 'settings',
-                label: 'إعدادات المنظومة والطباعة',
-                icon: Settings,
-              },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap select-none ${
-                    isActive
-                      ? 'bg-[#081c30] text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
-                  }`}
-                >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-sky-300' : 'text-slate-500'}`} />
-                  <span>{tab.label}</span>
-                  {tab.badge && (
-                    <span
-                      className={`text-[10px] font-mono-num font-extrabold px-1.5 py-0.2 rounded-full ${
-                        isActive ? 'bg-white/20 text-white' : tab.badgeColor || 'bg-slate-200 text-slate-700'
-                      }`}
-                    >
-                      {tab.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Quick Primary Actions Bar */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Executive Fast Actions Bar */}
+          <div className="flex items-center gap-2 shrink-0">
             {/* Quick Create: Receipt */}
             <button
               type="button"
               onClick={() => handleCreateNewReport('receipt')}
-              className="px-3 py-1.5 text-xs font-extrabold text-sky-900 bg-sky-50 hover:bg-sky-100 active:bg-sky-200 border border-sky-300 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs whitespace-nowrap"
+              className="px-3.5 py-1.5 text-xs font-black text-white bg-sky-600 hover:bg-sky-500 active:bg-sky-700 rounded-xl transition-all shadow-xs flex items-center gap-1.5 border border-sky-400/40 whitespace-nowrap"
               title="إنشاء نموذج محضر استلام عهدة جديد"
             >
-              <Plus className="w-3.5 h-3.5 text-sky-700" />
-              <span className="hidden sm:inline">محضر استلام</span>
+              <Plus className="w-4 h-4 text-sky-100" />
+              <span className="hidden sm:inline">محضر استلام جديد</span>
               <span className="sm:hidden">استلام</span>
             </button>
 
@@ -982,15 +926,15 @@ export default function App() {
             <button
               type="button"
               onClick={() => handleCreateNewReport('transfer')}
-              className="px-3 py-1.5 text-xs font-extrabold text-white bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 border border-emerald-800 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs whitespace-nowrap"
+              className="px-3.5 py-1.5 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 rounded-xl transition-all shadow-xs flex items-center gap-1.5 border border-emerald-400/40 whitespace-nowrap"
               title="إنشاء نموذج إذن مناقيل عهدة جديد (مُسلِّم ومُستلم)"
             >
-              <ArrowLeftRight className="w-3.5 h-3.5 text-emerald-200" />
-              <span className="hidden sm:inline">إذن مناقيل</span>
+              <ArrowLeftRight className="w-4 h-4 text-emerald-100" />
+              <span className="hidden sm:inline">إذن مناقيل جديد</span>
               <span className="sm:hidden">مناقيل</span>
             </button>
 
-            <div className="h-5 w-[1px] bg-slate-200 mx-0.5 hidden sm:block"></div>
+            <div className="h-6 w-px bg-white/20 mx-1 hidden md:block"></div>
 
             {/* Print A4 */}
             <button
@@ -999,12 +943,12 @@ export default function App() {
                 handleSaveReport();
                 setTimeout(() => window.print(), 150);
               }}
-              className="px-3.5 py-1.5 text-xs font-bold text-white bg-[#081c30] hover:bg-[#0f3459] active:bg-[#061422] rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs whitespace-nowrap"
+              className="px-3 py-1.5 text-xs font-bold text-white bg-white/10 hover:bg-white/20 active:bg-white/30 rounded-xl transition-colors flex items-center gap-1.5 border border-white/20 shadow-xs whitespace-nowrap"
               title="طباعة الورقة الرسمية A4 مباشرة"
             >
               <Printer className="w-3.5 h-3.5 text-sky-300" />
-              <span className="hidden sm:inline">طباعة A4</span>
-              <span className="sm:hidden">طباعة</span>
+              <span className="hidden md:inline">طباعة A4</span>
+              <span className="md:hidden">طباعة</span>
             </button>
 
             {/* Quick PDF Export */}
@@ -1012,13 +956,13 @@ export default function App() {
               type="button"
               onClick={() => handleExportPdf(currentReport)}
               disabled={isExportingPdf}
-              className="px-2.5 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap disabled:opacity-60"
+              className="px-2.5 py-1.5 text-xs font-bold text-rose-200 bg-rose-950/50 hover:bg-rose-900/60 rounded-xl transition-colors flex items-center gap-1 border border-rose-500/30 whitespace-nowrap disabled:opacity-50"
               title="تصدير المستند الحالي إلى PDF"
             >
               {isExportingPdf ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
-                <FileDown className="w-3.5 h-3.5 text-rose-600" />
+                <FileDown className="w-3.5 h-3.5 text-rose-400" />
               )}
               <span className="hidden xl:inline">PDF</span>
             </button>
@@ -1028,82 +972,96 @@ export default function App() {
               type="button"
               onClick={() => handleExportDocx(currentReport)}
               disabled={isExportingDocx}
-              className="px-2.5 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap disabled:opacity-60"
+              className="px-2.5 py-1.5 text-xs font-bold text-sky-200 bg-sky-950/50 hover:bg-sky-900/60 rounded-xl transition-colors flex items-center gap-1 border border-sky-500/30 whitespace-nowrap disabled:opacity-50"
               title="تصدير المستند الحالي إلى ملف Word (DOCX)"
             >
-              <FileText className="w-3.5 h-3.5 text-blue-600" />
+              <FileText className="w-3.5 h-3.5 text-sky-400" />
               <span className="hidden xl:inline">Word</span>
             </button>
           </div>
         </div>
 
-        {/* Mobile & Tablet Tab Bar (visible on < lg) */}
-        <div className="lg:hidden px-3 bg-slate-50 border-t border-slate-100 overflow-x-auto py-1.5">
-          <nav className="flex items-center gap-1.5 min-w-max">
-            {[
-              {
-                id: 'editor',
-                label: 'محرر المحاضر والأذون',
-                icon: FileText,
-                badge: currentReport?.reportType === 'transfer' ? 'مناقيل' : 'استلام',
-                badgeColor:
-                  currentReport?.reportType === 'transfer'
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-sky-600 text-white',
-              },
-              {
-                id: 'archive',
-                label: 'سجل المحاضر والبحث',
-                icon: Search,
-                badge: String(db.reports.length),
-                badgeColor: 'bg-slate-200 text-slate-800',
-              },
-              {
-                id: 'recipients',
-                label: 'دليل المستلمين والموظفين',
-                icon: Users,
-                badge: String(db.recipients.length),
-                badgeColor: 'bg-sky-100 text-sky-900 border border-sky-200',
-              },
-              {
-                id: 'committees',
-                label: 'اللجان وقائمة الأصناف',
-                icon: Package,
-              },
-              {
-                id: 'settings',
-                label: 'إعدادات المنظومة والطباعة',
-                icon: Settings,
-              },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                    isActive
-                      ? 'bg-[#081c30] text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
-                  }`}
-                >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-sky-300' : 'text-slate-500'}`} />
-                  <span>{tab.label}</span>
-                  {tab.badge && (
-                    <span
-                      className={`text-[10px] font-mono-num font-extrabold px-1.5 py-0.2 rounded-full ${
-                        isActive ? 'bg-white/20 text-white' : tab.badgeColor || 'bg-slate-200 text-slate-700'
+        {/* Tier 2: Dedicated Unified Navigation Tab Bar */}
+        <div className="bg-white border-b border-slate-200/90 px-3 lg:px-8 shadow-xs">
+          <div className="overflow-x-auto no-scrollbar py-1">
+            <nav className="flex items-center gap-1.5 sm:gap-2 min-w-max">
+              {[
+                {
+                  id: 'editor',
+                  label: 'محرر النماذج والمحاضر',
+                  icon: FileText,
+                  badge: currentReport?.reportType === 'transfer' ? 'مناقيل' : 'استلام',
+                  badgeNumber: currentReport?.reportNumber,
+                  badgeColor:
+                    currentReport?.reportType === 'transfer'
+                      ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                      : 'bg-sky-100 text-sky-900 border-sky-300',
+                },
+                {
+                  id: 'archive',
+                  label: 'سجل وأرشيف المحاضر',
+                  icon: Search,
+                  badge: `${db.reports.length} محضر`,
+                  badgeColor: 'bg-slate-100 text-slate-800 border-slate-200',
+                },
+                {
+                  id: 'recipients',
+                  label: 'دليل المستلمين والموظفين',
+                  icon: Users,
+                  badge: `${db.recipients.length} موظفاً`,
+                  badgeColor: 'bg-sky-100 text-sky-900 border-sky-200 font-bold',
+                },
+                {
+                  id: 'committees',
+                  label: 'تشكيل اللجان وقائمة الأصناف',
+                  icon: Package,
+                  badge: `${db.catalogItems?.length || 0} صنف`,
+                  badgeColor: 'bg-slate-100 text-slate-800 border-slate-200',
+                },
+                {
+                  id: 'settings',
+                  label: 'إعدادات المنظومة والترويسة',
+                  icon: Settings,
+                },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                    className={`relative px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap select-none ${
+                      isActive
+                        ? 'bg-[#0b2742] text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-950 hover:bg-slate-100/80'
+                    }`}
+                  >
+                    <Icon
+                      className={`w-4 h-4 transition-colors ${
+                        isActive ? 'text-sky-300' : 'text-slate-500'
                       }`}
-                    >
-                      {tab.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+                    />
+                    <span>{tab.label}</span>
+                    {tab.badge && (
+                      <span
+                        className={`text-[11px] font-mono-num font-extrabold px-2 py-0.5 rounded-full border transition-colors ${
+                          isActive
+                            ? 'bg-white/20 text-white border-white/30'
+                            : tab.badgeColor
+                        }`}
+                      >
+                        {tab.badge}
+                      </span>
+                    )}
+                    {isActive && (
+                      <span className="absolute -bottom-1 left-4 right-4 h-0.5 bg-sky-400 rounded-full"></span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
         </div>
       </header>
 
@@ -3162,165 +3120,749 @@ export default function App() {
         {/* ==================== TAB 3: RECIPIENTS & DEPARTMENTS ==================== */}
         {activeTab === 'recipients' && (
           <div className="space-y-6">
-            {/* Top Directory Executive Header */}
-            <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-800 flex items-center justify-center font-bold">
-                    <Users className="w-5 h-5 text-sky-700" />
+            {/* Top Directory Executive Banner & KPI Summary Cards */}
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-sky-600 to-[#0b2742] text-white flex items-center justify-center font-black shadow-md shadow-sky-900/10">
+                    <Users className="w-6 h-6 text-sky-200" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-black text-slate-900">
-                      دليل المستلمين والموظفين ({db.recipients.length} موظفاً · {db.departments.length} إدارات)
-                    </h2>
-                    <p className="text-xs text-slate-500 font-medium">
-                      السجل المعتمد لبيانات العاملين بمنطقة مياه دسوق ومحطاتها لسرعة التعبئة وإصدار محاضر الاستلام وأذون المناقيل
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl font-black text-slate-900">
+                        دليل المستلمين والموظفين والهيكل الإداري
+                      </h2>
+                      <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        سجل رسمي معتمد
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      {db.settings.subsidiaryCompanyName || 'شركة مياه الشرب والصرف الصحي بكفر الشيخ'} — منطقة مياه دسوق
                     </p>
                   </div>
                 </div>
+
+                {/* Top Action Buttons: Add Employee & Restore Official Directory */}
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddRecipientModalOpen(true)}
+                    className="px-4 py-2 text-xs font-bold text-white bg-sky-700 hover:bg-sky-800 active:bg-sky-900 rounded-xl transition-all shadow-xs flex items-center gap-2"
+                  >
+                    <UserPlus className="w-4 h-4 text-sky-200" />
+                    <span>إضافة موظف جديد</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (window.confirm('هل تريد استعادة وتحديث السجل الشامل لكافة العاملين (20 موظفاً و10 إدارات) من قاعدة البيانات الرسمية؟')) {
+                        await syncDatabase(
+                          {
+                            ...db,
+                            recipients: DEFAULT_DATABASE.recipients,
+                            departments: DEFAULT_DATABASE.departments,
+                          },
+                          'تم بنجاح تحديث وتعبئة السجل الشامل (20 موظفاً و10 إدارات معتمدة)'
+                        );
+                      }
+                    }}
+                    className="px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 border border-slate-300 rounded-xl transition-colors flex items-center gap-1.5 shadow-2xs"
+                    title="تعبئة واسترجاع الدليل الشامل لكافة موظفي منطقة دسوق (20 موظفاً)"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-slate-600" />
+                    <span>استعادة الدليل الشامل (20 موظفاً)</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Action: Reload / Restore Full Directory (20 employees & 10 departments) */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await syncDatabase(
-                      {
-                        ...db,
-                        recipients: DEFAULT_DATABASE.recipients,
-                        departments: DEFAULT_DATABASE.departments,
-                      },
-                      'تم تحديث واستعادة الدليل الرسمي لكافة العاملين (20 موظفاً و10 إدارات)'
-                    );
-                  }}
-                  className="px-3.5 py-2 text-xs font-bold text-sky-900 bg-sky-50 hover:bg-sky-100 active:bg-sky-200 border border-sky-300 rounded-xl transition-colors flex items-center gap-1.5 shadow-2xs"
-                  title="استعادة وتعبئة السجل الكامل للموظفين والإدارات"
-                >
-                  <RefreshCw className="w-3.5 h-3.5 text-sky-700" />
-                  <span>تحديث واستعادة الدليل الشامل (20 موظفاً)</span>
-                </button>
+              {/* 4 KPI Summary Metric Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                <div className="bg-gradient-to-br from-sky-50/70 to-white border border-sky-200/80 rounded-xl p-3.5 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-500">إجمالي الموظفين والمستلمين</div>
+                    <div className="text-xl font-black font-mono-num text-sky-950">
+                      {db.recipients.length} <span className="text-xs font-normal text-slate-500">موظفاً</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-indigo-50/70 to-white border border-indigo-200/80 rounded-xl p-3.5 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-500">الإدارات والمحطات التابعة</div>
+                    <div className="text-xl font-black font-mono-num text-indigo-950">
+                      {db.departments.length} <span className="text-xs font-normal text-slate-500">إدارات</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-emerald-50/70 to-white border border-emerald-200/80 rounded-xl p-3.5 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <FileSpreadsheet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-500">المحاضر والأذون المسجلة</div>
+                    <div className="text-xl font-black font-mono-num text-emerald-950">
+                      {db.reports.length} <span className="text-xs font-normal text-slate-500">مستند</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-amber-50/70 to-white border border-amber-200/80 rounded-xl p-3.5 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-500">حالة قاعدة البيانات</div>
+                    <div className="text-sm font-extrabold text-amber-950 flex items-center gap-1">
+                      <span>منطقة مياه دسوق</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Employees / Recipients Directory Column (8 of 12) */}
-              <div className="lg:col-span-8 bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">
-                      قائمة الموظفين والمستلمين
-                    </h3>
-                    <p className="text-[11px] text-slate-500">
-                      عرض {filteredDirectoryRecipients.length} من أصل {db.recipients.length} موظفاً مسجلاً
-                    </p>
-                  </div>
+            {/* Sub-Navigation: Employees vs Departments */}
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <div className="flex items-center gap-2 bg-slate-200/70 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setDirectorySubTab('employees')}
+                  className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-black transition-all flex items-center gap-2 ${
+                    directorySubTab === 'employees'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Users className="w-4 h-4 text-sky-700" />
+                  <span>دليل العاملين والمستلمين ({filteredDirectoryRecipients.length})</span>
+                </button>
 
-                  {/* Search and Dept Filter Toolbar */}
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <div className="relative flex-1 sm:w-64">
-                      <Search className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-400" />
+                <button
+                  type="button"
+                  onClick={() => setDirectorySubTab('departments')}
+                  className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-black transition-all flex items-center gap-2 ${
+                    directorySubTab === 'departments'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Building2 className="w-4 h-4 text-indigo-700" />
+                  <span>الهيكل التنظيمي والإدارات والمحطات ({db.departments.length})</span>
+                </button>
+              </div>
+
+              {/* View Mode Toggle (only for employees sub-tab) */}
+              {directorySubTab === 'employees' && (
+                <div className="hidden sm:flex items-center gap-1 bg-white border border-slate-200 p-1 rounded-xl shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setDirectoryViewMode('table')}
+                    className={`p-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                      directoryViewMode === 'table'
+                        ? 'bg-sky-50 text-sky-800 border border-sky-200'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                    title="عرض الجدول التنفيذي"
+                  >
+                    <List className="w-4 h-4" />
+                    <span className="text-[11px]">جدول</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDirectoryViewMode('cards')}
+                    className={`p-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                      directoryViewMode === 'cards'
+                        ? 'bg-sky-50 text-sky-800 border border-sky-200'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                    title="عرض البطاقات التعريفية"
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                    <span className="text-[11px]">بطاقات</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* ================= SUB-TAB 1: EMPLOYEES DIRECTORY ================= */}
+            {directorySubTab === 'employees' && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
+                {/* Advanced Search & Department Filter Toolbar */}
+                <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50/80 p-3 rounded-xl border border-slate-200/80">
+                  <div className="flex items-center gap-3 flex-1 min-w-[280px]">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 absolute right-3.5 top-2.5 text-slate-400" />
                       <input
                         type="text"
                         value={recipientSearchQuery}
                         onChange={(e) => setRecipientSearchQuery(e.target.value)}
-                        placeholder="بحث بالاسم، الكود، الرقم القومي..."
-                        className="w-full pr-8 pl-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden focus:border-sky-500 transition-colors"
+                        placeholder="بحث بالاسم، الصفة الوظيفية، الكود، الرقم القومي، الهاتف..."
+                        className="w-full pr-10 pl-8 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-hidden focus:border-sky-500 focus:ring-1 focus:ring-sky-500 font-medium transition-all"
                       />
                       {recipientSearchQuery && (
                         <button
                           type="button"
                           onClick={() => setRecipientSearchQuery('')}
-                          className="absolute left-2.5 top-2 text-slate-400 hover:text-slate-600"
+                          className="absolute left-3 top-2.5 text-slate-400 hover:text-slate-600"
                         >
-                          <X className="w-3 h-3" />
+                          <X className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
 
-                    <select
-                      value={recipientDeptFilter}
-                      onChange={(e) => setRecipientDeptFilter(e.target.value)}
-                      className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden font-medium"
-                    >
-                      <option value="all">كل الإدارات</option>
-                      {db.departments.map((d) => (
-                        <option key={d.id} value={d.name}>
-                          {d.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="shrink-0">
+                      <select
+                        value={recipientDeptFilter}
+                        onChange={(e) => setRecipientDeptFilter(e.target.value)}
+                        className="px-3 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-hidden font-bold text-slate-800"
+                      >
+                        <option value="all">كافة الإدارات والمحطات (10)</option>
+                        {db.departments.map((d) => (
+                          <option key={d.id} value={d.name}>
+                            {d.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-500">
+                      عرض <span className="font-mono-num text-slate-900 font-black">{filteredDirectoryRecipients.length}</span> من أصل <span className="font-mono-num text-slate-900 font-black">{db.recipients.length}</span> موظفاً
+                    </span>
+                    {recipientDeptFilter !== 'all' && (
+                      <button
+                        type="button"
+                        onClick={() => setRecipientDeptFilter('all')}
+                        className="text-xs text-sky-700 hover:underline font-bold"
+                      >
+                        إلغاء الفلتر
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {/* Add New Recipient Form */}
-                <div className="bg-slate-50/90 border border-slate-200/90 rounded-xl p-3.5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <UserPlus className="w-3.5 h-3.5 text-sky-700" />
-                      <span>إضافة موظف جديد للدليل:</span>
+                {/* View 1: Full-Width Executive Table */}
+                {directoryViewMode === 'table' ? (
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-xs">
+                    <table className="w-full text-right text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100/90 text-slate-800 border-b border-slate-200 font-black text-[12px]">
+                          <th className="py-3 px-3.5 text-center w-16">الكود</th>
+                          <th className="py-3 px-4">اسم الموظف والصفة الوظيفية</th>
+                          <th className="py-3 px-4">الإدارة التابعة ومقر العمل</th>
+                          <th className="py-3 px-4">الرقم القومي (14 رقم)</th>
+                          <th className="py-3 px-4">رقم الهاتف المحمول</th>
+                          <th className="py-3 px-3 text-center">العهد</th>
+                          <th className="py-3 px-4 text-center min-w-[260px]">إجراءات إصدار المحاضر السريعة</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {filteredDirectoryRecipients.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="py-12 text-center text-slate-500">
+                              <p className="text-sm font-bold">لا توجد بيانات موظفين تطابق البحث الحالي.</p>
+                              <p className="text-xs mt-1">تأكد من شروط البحث أو اضغط على «استعادة الدليل الشامل (20 موظفاً)».</p>
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredDirectoryRecipients.map((rec) => {
+                            const count = db.reports.filter(
+                              (r) =>
+                                r.recipientName?.trim() === rec.name.trim() ||
+                                (r.delivererName && r.delivererName.trim() === rec.name.trim())
+                            ).length;
+                            return (
+                              <tr key={rec.id} className="hover:bg-sky-50/40 transition-colors group">
+                                {/* Employee Code */}
+                                <td className="py-3 px-3 text-center">
+                                  <span className="inline-block px-2 py-1 rounded-md text-[11px] font-mono-num font-black bg-slate-100 text-slate-800 border border-slate-300">
+                                    {rec.employeeCode || '—'}
+                                  </span>
+                                </td>
+
+                                {/* Name & Job Title */}
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sky-600 to-sky-800 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                                      {rec.name.charAt(0)}
+                                    </div>
+                                    <div>
+                                      <div className="font-black text-slate-900 text-xs sm:text-sm">
+                                        {rec.name}
+                                      </div>
+                                      <div className="text-[11.5px] text-slate-600 font-semibold mt-0.5">
+                                        {rec.jobTitle || 'موظف'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Department & Location */}
+                                <td className="py-3 px-4">
+                                  <span className="inline-flex items-center gap-1.5 bg-sky-50 text-sky-900 px-2.5 py-1 rounded-lg text-xs font-bold border border-sky-200">
+                                    <Building2 className="w-3 h-3 text-sky-700" />
+                                    <span>{rec.departmentName || 'منطقة مياه دسوق'}</span>
+                                  </span>
+                                </td>
+
+                                {/* National ID with Copy */}
+                                <td className="py-3 px-4 font-mono-num text-xs">
+                                  {rec.nationalId ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard?.writeText(rec.nationalId);
+                                        setCopiedText(rec.nationalId);
+                                        setTimeout(() => setCopiedText(null), 1500);
+                                      }}
+                                      className="inline-flex items-center gap-1.5 font-bold text-slate-800 hover:text-sky-700 bg-slate-50 hover:bg-white px-2 py-1 rounded border border-slate-200 transition-colors"
+                                      title="اضغط لنسخ الرقم القومي"
+                                    >
+                                      <span>{rec.nationalId}</span>
+                                      {copiedText === rec.nationalId ? (
+                                        <Check className="w-3 h-3 text-emerald-600" />
+                                      ) : (
+                                        <Copy className="w-3 h-3 text-slate-400 group-hover:text-slate-600" />
+                                      )}
+                                    </button>
+                                  ) : (
+                                    <span className="text-slate-400">—</span>
+                                  )}
+                                </td>
+
+                                {/* Phone */}
+                                <td className="py-3 px-4 font-mono-num text-xs">
+                                  {rec.phone ? (
+                                    <div className="flex items-center gap-1.5 text-slate-700 font-bold">
+                                      <Phone className="w-3.5 h-3.5 text-slate-400" />
+                                      <span>{rec.phone}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400">—</span>
+                                  )}
+                                </td>
+
+                                {/* Custody Reports Count */}
+                                <td className="py-3 px-3 text-center font-mono-num">
+                                  <span
+                                    className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-black ${
+                                      count > 0
+                                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                        : 'bg-slate-100 text-slate-500'
+                                    }`}
+                                  >
+                                    {count}
+                                  </span>
+                                </td>
+
+                                {/* Actions: Create Receipt, Create Transfer, Insert */}
+                                <td className="py-3 px-4 text-center">
+                                  <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                    {/* Action 1: Create Receipt for this Employee */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCreateNewReport('receipt', { recipient: rec })}
+                                      className="px-2.5 py-1 text-[11px] font-black bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-colors flex items-center gap-1 shadow-2xs"
+                                      title="إنشاء نموذج محضر استلام جديد لهذا الموظف فوراً"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                      <span>+ استلام</span>
+                                    </button>
+
+                                    {/* Action 2: Create Transfer starting with this Employee as Deliverer */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCreateNewReport('transfer', { deliverer: rec })}
+                                      className="px-2.5 py-1 text-[11px] font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center gap-1 shadow-2xs"
+                                      title="إنشاء نموذج إذن مناقيل جديد يبدأ من هذا الموظف كمُسلِّم"
+                                    >
+                                      <ArrowLeftRight className="w-3 h-3" />
+                                      <span>⇄ مناقيل</span>
+                                    </button>
+
+                                    {/* Action 3: Set as recipient in currently opened report */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCurrentReport({
+                                          ...currentReport,
+                                          recipientName: rec.name,
+                                          recipientJobTitle: rec.jobTitle,
+                                          departmentName: rec.departmentName,
+                                          recipientEmployeeCode: rec.employeeCode,
+                                          recipientNationalId: rec.nationalId,
+                                        });
+                                        setActiveTab('editor');
+                                        showToast(`تم تعيين "${rec.name}" كمستلم في المحضر الحالي`);
+                                      }}
+                                      className="px-2 py-1 text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg border border-slate-300 transition-colors"
+                                      title="تعبئة بياناته كمستلم في المستند المفتوح حالياً بمحرر المحاضر"
+                                    >
+                                      <span>تحديد كمستلم</span>
+                                    </button>
+
+                                    {/* Delete Employee */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (window.confirm(`هل أنت متأكد من حذف الموظف "${rec.name}" من الدليل؟`)) {
+                                          syncDatabase(
+                                            {
+                                              ...db,
+                                              recipients: db.recipients.filter((r) => r.id !== rec.id),
+                                            },
+                                            'تم حذف الموظف من الدليل'
+                                          );
+                                        }
+                                      }}
+                                      className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                                      title="حذف من السجل"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  /* View 2: Corporate Employee ID Cards Grid */
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredDirectoryRecipients.map((rec) => {
+                      const count = db.reports.filter(
+                        (r) =>
+                          r.recipientName?.trim() === rec.name.trim() ||
+                          (r.delivererName && r.delivererName.trim() === rec.name.trim())
+                      ).length;
+                      return (
+                        <div
+                          key={rec.id}
+                          className="bg-white border border-slate-200 hover:border-sky-300 rounded-xl p-4 space-y-3.5 shadow-2xs hover:shadow-sm transition-all"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0b2742] to-sky-700 text-white font-black text-sm flex items-center justify-center shadow-xs">
+                                {rec.name.charAt(0)}
+                              </div>
+                              <div>
+                                <h4 className="font-black text-slate-900 text-sm">{rec.name}</h4>
+                                <p className="text-xs text-slate-600 font-medium">{rec.jobTitle || 'موظف'}</p>
+                              </div>
+                            </div>
+                            {rec.employeeCode && (
+                              <span className="text-[11px] font-mono-num font-black bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
+                                #{rec.employeeCode}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="bg-slate-50 rounded-lg p-2.5 space-y-1.5 text-xs">
+                            <div className="flex items-center justify-between text-slate-700">
+                              <span className="text-slate-500 font-medium">الإدارة:</span>
+                              <span className="font-bold text-sky-950">{rec.departmentName || 'منطقة دسوق'}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-slate-700 font-mono-num">
+                              <span className="text-slate-500 font-medium font-sans">الرقم القومي:</span>
+                              <span className="font-bold">{rec.nationalId || '—'}</span>
+                            </div>
+                            {rec.phone && (
+                              <div className="flex items-center justify-between text-slate-700 font-mono-num">
+                                <span className="text-slate-500 font-medium font-sans">الهاتف:</span>
+                                <span className="font-bold">{rec.phone}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between text-slate-700">
+                              <span className="text-slate-500 font-medium">العهد والوثائق:</span>
+                              <span className="font-black text-emerald-800">{count} مستند</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
+                            <button
+                              type="button"
+                              onClick={() => handleCreateNewReport('receipt', { recipient: rec })}
+                              className="flex-1 py-1.5 text-xs font-bold text-white bg-sky-700 hover:bg-sky-800 rounded-lg flex items-center justify-center gap-1 shadow-2xs"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>استلام عهدة</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleCreateNewReport('transfer', { deliverer: rec })}
+                              className="flex-1 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg flex items-center justify-center gap-1 shadow-2xs"
+                            >
+                              <ArrowLeftRight className="w-3.5 h-3.5" />
+                              <span>إذن مناقيل</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ================= SUB-TAB 2: DEPARTMENTS & STATIONS DIRECTORY ================= */}
+            {directorySubTab === 'departments' && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">
+                      الهيكل التنظيمي والمحطات التابعة ({db.departments.length} إدارات ومحطات)
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      المحطات والشبكات والإدارات الفنية والمالية بمنطقة مياه دسوق
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2.5">
+                    <div className="relative w-64">
+                      <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
+                      <input
+                        type="text"
+                        value={departmentSearchQuery}
+                        onChange={(e) => setDepartmentSearchQuery(e.target.value)}
+                        placeholder="بحث في الإدارات والمحطات..."
+                        className="w-full pr-9 pl-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddDepartmentModalOpen(true)}
+                      className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-700 hover:bg-indigo-800 rounded-xl flex items-center gap-1.5 shadow-2xs"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>إضافة إدارة جديدة</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Departments Table */}
+                <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-xs">
+                  <table className="w-full text-right text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100/90 text-slate-800 border-b border-slate-200 font-black text-[12px]">
+                        <th className="py-3 px-3 text-center w-24">كود الإدارة</th>
+                        <th className="py-3 px-4">اسم الإدارة أو المحطة</th>
+                        <th className="py-3 px-4">مدير الإدارة / المسئول</th>
+                        <th className="py-3 px-4">المقر وموقع العمل</th>
+                        <th className="py-3 px-3 text-center">الموظفون</th>
+                        <th className="py-3 px-3 text-center">المحاضر</th>
+                        <th className="py-3 px-4 text-center">إجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {filteredDirectoryDepartments.map((dept) => {
+                        const repCount = db.reports.filter(
+                          (r) => r.departmentName?.trim() === dept.name.trim()
+                        ).length;
+                        const empCount = db.recipients.filter(
+                          (rec) => rec.departmentName?.trim() === dept.name.trim()
+                        ).length;
+                        return (
+                          <tr key={dept.id} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="py-3 px-3 text-center">
+                              <span className="inline-block px-2 py-0.5 rounded font-mono-num font-black text-[11px] bg-indigo-50 text-indigo-900 border border-indigo-200">
+                                {dept.code || '—'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="font-black text-slate-900 text-xs sm:text-sm">{dept.name}</div>
+                            </td>
+                            <td className="py-3 px-4 font-bold text-slate-700">
+                              {dept.managerName || '—'}
+                            </td>
+                            <td className="py-3 px-4 text-slate-600">
+                              {dept.location || 'منطقة مياه دسوق'}
+                            </td>
+                            <td className="py-3 px-3 text-center font-mono-num">
+                              <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-black bg-sky-100 text-sky-900 border border-sky-200">
+                                {empCount}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-center font-mono-num font-bold text-slate-700">
+                              {repCount}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRecipientDeptFilter(dept.name);
+                                    setDirectorySubTab('employees');
+                                  }}
+                                  className="px-2.5 py-1 text-xs font-bold text-sky-800 bg-sky-50 hover:bg-sky-100 rounded-lg border border-sky-200"
+                                >
+                                  عرض الموظفين ({empCount})
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (window.confirm(`هل أنت متأكد من حذف الإدارة "${dept.name}"؟`)) {
+                                      syncDatabase(
+                                        {
+                                          ...db,
+                                          departments: db.departments.filter((d) => d.id !== dept.id),
+                                        },
+                                        'تم حذف الإدارة من الدليل'
+                                      );
+                                    }
+                                  }}
+                                  className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg"
+                                  title="حذف"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ================= MODAL 1: ADD NEW EMPLOYEE ================= */}
+            {isAddRecipientModalOpen && (
+              <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-slate-200">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center">
+                        <UserPlus className="w-4 h-4" />
+                      </div>
+                      <h3 className="text-base font-black text-slate-900">
+                        إضافة موظف جديد إلى دليل العاملين
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddRecipientModalOpen(false)}
+                      className="text-slate-400 hover:text-slate-600 p-1"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        الاسم بالكامل (رباعي) *
+                      </label>
+                      <input
+                        type="text"
+                        value={newRecipient.name}
+                        onChange={(e) => setNewRecipient({ ...newRecipient, name: e.target.value })}
+                        placeholder="مثال: حسام أحمد حسن بدوي"
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl font-bold focus:bg-white focus:outline-hidden focus:border-sky-600"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          الصفة الوظيفية
+                        </label>
+                        <input
+                          type="text"
+                          value={newRecipient.jobTitle}
+                          onChange={(e) => setNewRecipient({ ...newRecipient, jobTitle: e.target.value })}
+                          placeholder="مثال: فني أول تشغيل"
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          الرقم الوظيفي (الكود)
+                        </label>
+                        <input
+                          type="text"
+                          value={newRecipient.employeeCode}
+                          onChange={(e) => setNewRecipient({ ...newRecipient, employeeCode: e.target.value })}
+                          placeholder="مثال: 10450"
+                          className="w-full px-3 py-2 text-xs font-mono-num bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        الإدارة التابعة ومقر العمل
+                      </label>
+                      <select
+                        value={newRecipient.departmentName}
+                        onChange={(e) => setNewRecipient({ ...newRecipient, departmentName: e.target.value })}
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl font-bold focus:bg-white focus:outline-hidden"
+                      >
+                        <option value="">اختر الإدارة التابعة...</option>
+                        {db.departments.map((d) => (
+                          <option key={d.id} value={d.name}>
+                            {d.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          الرقم القومي (14 رقم)
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={14}
+                          value={newRecipient.nationalId}
+                          onChange={(e) => setNewRecipient({ ...newRecipient, nationalId: e.target.value })}
+                          placeholder="29001011500000"
+                          className="w-full px-3 py-2 text-xs font-mono-num bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          رقم الهاتف المحمول
+                        </label>
+                        <input
+                          type="text"
+                          value={newRecipient.phone}
+                          onChange={(e) => setNewRecipient({ ...newRecipient, phone: e.target.value })}
+                          placeholder="010XXXXXXXX"
+                          className="w-full px-3 py-2 text-xs font-mono-num bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden"
+                        />
+                      </div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    <input
-                      type="text"
-                      value={newRecipient.name}
-                      onChange={(e) => setNewRecipient({ ...newRecipient, name: e.target.value })}
-                      placeholder="الاسم رباعي *"
-                      className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-semibold"
-                    />
-                    <input
-                      type="text"
-                      value={newRecipient.jobTitle}
-                      onChange={(e) =>
-                        setNewRecipient({ ...newRecipient, jobTitle: e.target.value })
-                      }
-                      placeholder="الصفة الوظيفية"
-                      className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
-                    />
-                    <input
-                      type="text"
-                      list="dept-datalist"
-                      value={newRecipient.departmentName}
-                      onChange={(e) =>
-                        setNewRecipient({ ...newRecipient, departmentName: e.target.value })
-                      }
-                      placeholder="الإدارة التابعة"
-                      className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
-                    />
-                    <input
-                      type="text"
-                      value={newRecipient.employeeCode}
-                      onChange={(e) =>
-                        setNewRecipient({ ...newRecipient, employeeCode: e.target.value })
-                      }
-                      placeholder="الرقم الوظيفي"
-                      className="px-3 py-1.5 text-xs font-mono-num bg-white border border-slate-300 rounded-lg"
-                    />
-                    <input
-                      type="text"
-                      value={newRecipient.nationalId}
-                      onChange={(e) =>
-                        setNewRecipient({ ...newRecipient, nationalId: e.target.value })
-                      }
-                      placeholder="الرقم القومي (14 رقم)"
-                      className="px-3 py-1.5 text-xs font-mono-num bg-white border border-slate-300 rounded-lg"
-                    />
-                    <input
-                      type="text"
-                      value={newRecipient.phone}
-                      onChange={(e) =>
-                        setNewRecipient({ ...newRecipient, phone: e.target.value })
-                      }
-                      placeholder="رقم الهاتف المحمول"
-                      className="px-3 py-1.5 text-xs font-mono-num bg-white border border-slate-300 rounded-lg"
-                    />
-                  </div>
-                  <div className="flex justify-end">
+
+                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddRecipientModalOpen(false)}
+                      className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                    >
+                      إلغاء
+                    </button>
                     <button
                       type="button"
                       onClick={async () => {
-                        if (!newRecipient.name.trim()) return;
+                        if (!newRecipient.name.trim()) {
+                          showToast('يرجى إدخال اسم الموظف رباعياً');
+                          return;
+                        }
                         const rec: RecipientRecord = {
                           ...newRecipient,
                           id: `rec-${Date.now()}`,
@@ -3328,7 +3870,7 @@ export default function App() {
                         };
                         await syncDatabase(
                           { ...db, recipients: [rec, ...db.recipients] },
-                          `تمت إضافة الموظف "${rec.name}" إلى دليل العاملين`
+                          `تمت بنجاح إضافة الموظف "${rec.name}" إلى دليل العاملين`
                         );
                         setNewRecipient({
                           name: '',
@@ -3338,235 +3880,109 @@ export default function App() {
                           nationalId: '',
                           phone: '',
                         });
+                        setIsAddRecipientModalOpen(false);
                       }}
-                      className="px-4 py-1.5 text-xs font-bold text-white bg-sky-700 hover:bg-sky-800 rounded-lg flex items-center justify-center gap-1.5 shadow-2xs"
+                      className="px-5 py-2 text-xs font-black text-white bg-sky-700 hover:bg-sky-800 rounded-xl shadow-xs"
                     >
-                      <UserPlus className="w-3.5 h-3.5" />
-                      <span>حفظ الموظف بالدليل</span>
+                      حفظ وإضافة إلى السجل
                     </button>
                   </div>
                 </div>
-
-                <datalist id="dept-datalist">
-                  {db.departments.map((d) => (
-                    <option key={d.id} value={d.name} />
-                  ))}
-                </datalist>
-
-                {/* Employees Table */}
-                <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                  <table className="w-full text-right text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
-                        <th className="py-2.5 px-3">الموظف والكود</th>
-                        <th className="py-2.5 px-3">الصفة الوظيفية</th>
-                        <th className="py-2.5 px-3">الإدارة ومقر العمل</th>
-                        <th className="py-2.5 px-3">الرقم القومي / الهاتف</th>
-                        <th className="py-2.5 px-3 text-center">المحاضر</th>
-                        <th className="py-2.5 px-3 text-center min-w-[210px]">إجراءات سريعة</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {filteredDirectoryRecipients.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-8 text-center text-slate-500">
-                            لا توجد بيانات موظفين تطابق بحثك. اضغط على «تحديث واستعادة الدليل الشامل».
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredDirectoryRecipients.map((rec) => {
-                          const count = db.reports.filter(
-                            (r) =>
-                              r.recipientName.trim() === rec.name.trim() ||
-                              (r.delivererName && r.delivererName.trim() === rec.name.trim())
-                          ).length;
-                          return (
-                            <tr key={rec.id} className="hover:bg-slate-50/80 transition-colors">
-                              <td className="py-2.5 px-3">
-                                <div className="font-bold text-slate-900">{rec.name}</div>
-                                {rec.employeeCode && (
-                                  <div className="text-[10.5px] font-mono-num text-sky-800 font-semibold">
-                                    كود: {rec.employeeCode}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="py-2.5 px-3 text-slate-700 font-medium">
-                                {rec.jobTitle || '—'}
-                              </td>
-                              <td className="py-2.5 px-3">
-                                <span className="inline-block bg-slate-100 text-slate-800 px-2 py-0.5 rounded text-[11px] font-semibold border border-slate-200">
-                                  {rec.departmentName || '—'}
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-3 text-[11px] font-mono-num">
-                                <div className="text-slate-800 font-medium">
-                                  {rec.nationalId || '—'}
-                                </div>
-                                {rec.phone && (
-                                  <div className="text-slate-500 flex items-center gap-1 text-[10px]">
-                                    <Phone className="w-2.5 h-2.5 text-slate-400" />
-                                    <span>{rec.phone}</span>
-                                  </div>
-                                )}
-                              </td>
-                              <td className="py-2.5 px-3 text-center font-mono-num font-bold text-sky-900">
-                                {count}
-                              </td>
-                              <td className="py-2.5 px-3 text-center">
-                                <div className="flex items-center justify-center gap-1 flex-wrap">
-                                  {/* Insert as recipient in current opened report */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setCurrentReport({
-                                        ...currentReport,
-                                        recipientName: rec.name,
-                                        recipientJobTitle: rec.jobTitle,
-                                        departmentName: rec.departmentName,
-                                        recipientEmployeeCode: rec.employeeCode,
-                                        recipientNationalId: rec.nationalId,
-                                      });
-                                      setActiveTab('editor');
-                                      showToast(`تم اختيار "${rec.name}" كمستلم في المحضر الحالي`);
-                                    }}
-                                    className="px-2 py-1 text-[10.5px] font-bold bg-sky-50 text-sky-800 hover:bg-sky-100 rounded border border-sky-200"
-                                    title="إدراج كمُستلِم في المحضر الحالي المفتوح"
-                                  >
-                                    مُستلِم
-                                  </button>
-
-                                  {/* Insert as deliverer in current opened report */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setCurrentReport({
-                                        ...currentReport,
-                                        reportType: 'transfer',
-                                        delivererName: rec.name,
-                                        delivererJobTitle: rec.jobTitle,
-                                        delivererDepartmentName: rec.departmentName,
-                                        delivererEmployeeCode: rec.employeeCode,
-                                        delivererNationalId: rec.nationalId,
-                                      });
-                                      setActiveTab('editor');
-                                      showToast(`تم اختيار "${rec.name}" كطرف مُسلِّم في إذن المناقيل الحالي`);
-                                    }}
-                                    className="px-2 py-1 text-[10.5px] font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 rounded border border-emerald-200"
-                                    title="إدراج كطرف مُسلِّم في إذن المناقيل الحالي المفتوح"
-                                  >
-                                    مُسلِّم
-                                  </button>
-
-                                  {/* Fast create new receipt for this employee */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCreateNewReport('receipt', { recipient: rec })}
-                                    className="px-2 py-1 text-[10.5px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded border border-slate-300"
-                                    title="إنشاء نموذج محضر استلام جديد لهذا الموظف فوراً"
-                                  >
-                                    + استلام
-                                  </button>
-
-                                  {/* Fast create new transfer with this employee as deliverer */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCreateNewReport('transfer', { deliverer: rec })}
-                                    className="px-2 py-1 text-[10.5px] font-bold bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded border border-emerald-300"
-                                    title="إنشاء إذن مناقيل جديد يبدأ من هذا الموظف كمُسلِّم"
-                                  >
-                                    ⇄ مناقيل
-                                  </button>
-
-                                  {/* Delete recipient */}
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      syncDatabase(
-                                        {
-                                          ...db,
-                                          recipients: db.recipients.filter((r) => r.id !== rec.id),
-                                        },
-                                        'تم حذف الموظف من الدليل'
-                                      )
-                                    }
-                                    className="p-1 text-rose-600 hover:bg-rose-50 rounded"
-                                    title="حذف من الدليل"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
               </div>
+            )}
 
-              {/* Departments Column (4 of 12) */}
-              <div className="lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
-                <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">
-                      الإدارات والمحطات التابعة ({db.departments.length})
-                    </h3>
-                    <p className="text-[11px] text-slate-500">
-                      الهيكل الإداري لمنطقة مياه دسوق
-                    </p>
-                  </div>
-                </div>
-
-                {/* Department Search */}
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-400" />
-                  <input
-                    type="text"
-                    value={departmentSearchQuery}
-                    onChange={(e) => setDepartmentSearchQuery(e.target.value)}
-                    placeholder="بحث في الإدارات والمحطات..."
-                    className="w-full pr-8 pl-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden"
-                  />
-                </div>
-
-                {/* Add New Department Form */}
-                <div className="bg-slate-50/90 border border-slate-200/90 rounded-xl p-3.5 space-y-2.5">
-                  <div className="text-xs font-bold text-slate-800">إضافة إدارة جديدة:</div>
-                  <div className="space-y-2">
-                    <input
-                      type="text"
-                      value={newDepartment.name}
-                      onChange={(e) =>
-                        setNewDepartment({ ...newDepartment, name: e.target.value })
-                      }
-                      placeholder="اسم الإدارة التابعة *"
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-semibold"
-                    />
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        value={newDepartment.managerName}
-                        onChange={(e) =>
-                          setNewDepartment({ ...newDepartment, managerName: e.target.value })
-                        }
-                        placeholder="اسم مدير الإدارة"
-                        className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
-                      />
-                      <input
-                        type="text"
-                        value={newDepartment.code}
-                        onChange={(e) =>
-                          setNewDepartment({ ...newDepartment, code: e.target.value })
-                        }
-                        placeholder="كود الإدارة"
-                        className="px-3 py-1.5 text-xs font-mono-num bg-white border border-slate-300 rounded-lg"
-                      />
+            {/* ================= MODAL 2: ADD NEW DEPARTMENT ================= */}
+            {isAddDepartmentModalOpen && (
+              <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                        <Building2 className="w-4 h-4" />
+                      </div>
+                      <h3 className="text-base font-black text-slate-900">
+                        إضافة إدارة أو محطة جديدة
+                      </h3>
                     </div>
                     <button
                       type="button"
+                      onClick={() => setIsAddDepartmentModalOpen(false)}
+                      className="text-slate-400 hover:text-slate-600 p-1"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        اسم الإدارة أو المحطة *
+                      </label>
+                      <input
+                        type="text"
+                        value={newDepartment.name}
+                        onChange={(e) => setNewDepartment({ ...newDepartment, name: e.target.value })}
+                        placeholder="مثال: إدارة محطة مياه فوه الجديدة"
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl font-bold focus:bg-white focus:outline-hidden focus:border-indigo-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        اسم مدير الإدارة / المشرف
+                      </label>
+                      <input
+                        type="text"
+                        value={newDepartment.managerName}
+                        onChange={(e) => setNewDepartment({ ...newDepartment, managerName: e.target.value })}
+                        placeholder="مثال: م. أحمد البدري"
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          كود الإدارة
+                        </label>
+                        <input
+                          type="text"
+                          value={newDepartment.code}
+                          onChange={(e) => setNewDepartment({ ...newDepartment, code: e.target.value })}
+                          placeholder="DSQ-11"
+                          className="w-full px-3 py-2 text-xs font-mono-num bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          مقر العمل / الموقع
+                        </label>
+                        <input
+                          type="text"
+                          value={newDepartment.location}
+                          onChange={(e) => setNewDepartment({ ...newDepartment, location: e.target.value })}
+                          placeholder="منطقة مياه دسوق"
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddDepartmentModalOpen(false)}
+                      className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                    >
+                      إلغاء
+                    </button>
+                    <button
+                      type="button"
                       onClick={async () => {
-                        if (!newDepartment.name.trim()) return;
+                        if (!newDepartment.name.trim()) {
+                          showToast('يرجى إدخال اسم الإدارة');
+                          return;
+                        }
                         const dept: DepartmentRecord = {
                           ...newDepartment,
                           id: `dept-${Date.now()}`,
@@ -3575,7 +3991,7 @@ export default function App() {
                         };
                         await syncDatabase(
                           { ...db, departments: [dept, ...db.departments] },
-                          `تمت إضافة "${dept.name}" إلى قاعدة البيانات`
+                          `تمت إضافة الإدارة "${dept.name}" بنجاح`
                         );
                         setNewDepartment({
                           name: '',
@@ -3583,77 +3999,16 @@ export default function App() {
                           location: 'منطقة مياه دسوق',
                           code: '',
                         });
+                        setIsAddDepartmentModalOpen(false);
                       }}
-                      className="w-full py-1.5 text-xs font-bold text-white bg-sky-700 hover:bg-sky-800 rounded-lg flex items-center justify-center gap-1 shadow-2xs"
+                      className="px-5 py-2 text-xs font-black text-white bg-indigo-700 hover:bg-indigo-800 rounded-xl shadow-xs"
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>إضافة الإدارة التابعة</span>
+                      حفظ الإدارة
                     </button>
                   </div>
                 </div>
-
-                {/* Departments List */}
-                <div className="divide-y divide-slate-200 border border-slate-200 rounded-xl overflow-hidden max-h-[500px] overflow-y-auto">
-                  {filteredDirectoryDepartments.map((dept) => {
-                    const repCount = db.reports.filter(
-                      (r) => r.departmentName.trim() === dept.name.trim()
-                    ).length;
-                    const empCount = db.recipients.filter(
-                      (rec) => rec.departmentName.trim() === dept.name.trim()
-                    ).length;
-                    return (
-                      <div
-                        key={dept.id}
-                        className="p-3 hover:bg-slate-50 flex items-center justify-between gap-2"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-slate-900">{dept.name}</span>
-                            {dept.code && (
-                              <span className="text-[10px] font-mono-num font-bold text-sky-800 bg-sky-50 px-1.5 py-0.2 rounded border border-sky-200">
-                                {dept.code}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5">
-                            {dept.managerName ? `المدير: ${dept.managerName} · ` : ''}
-                            <span className="font-mono-num">{empCount} موظفاً</span> ·{' '}
-                            <span className="font-mono-num">{repCount} محضر</span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => setRecipientDeptFilter(dept.name)}
-                            className="px-2 py-1 text-[10.5px] font-bold text-sky-800 bg-sky-50 hover:bg-sky-100 rounded border border-sky-200"
-                            title="فلترة الموظفين التابعين لهذه الإدارة"
-                          >
-                            عرض الموظفين
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              syncDatabase(
-                                {
-                                  ...db,
-                                  departments: db.departments.filter((d) => d.id !== dept.id),
-                                },
-                                'تم حذف الإدارة من الدليل'
-                              )
-                            }
-                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
-                            title="حذف"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
