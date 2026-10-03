@@ -109,8 +109,11 @@ export const PrintableReceiptSheet: React.FC<PrintableReceiptSheetProps> = ({
         >
           {/* Subtle Security Watermark Background */}
           {settings.showWatermark && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] select-none z-0">
-              <OfficialLogo className="w-[105mm] h-[105mm]" />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.035] select-none z-0">
+              <OfficialLogo
+                className="w-[110mm] h-[110mm] aspect-square"
+                customLogoUrl={settings.customLogoUrl}
+              />
             </div>
           )}
 
@@ -164,7 +167,10 @@ export const PrintableReceiptSheet: React.FC<PrintableReceiptSheetProps> = ({
                     </span>
                   </div>
                 )}
-                <OfficialLogo className="w-22 h-18 sm:w-24 sm:h-20" />
+                <OfficialLogo
+                  className="w-20 h-20 sm:w-22 sm:h-22 aspect-square shrink-0"
+                  customLogoUrl={settings.customLogoUrl}
+                />
               </div>
             </div>
 

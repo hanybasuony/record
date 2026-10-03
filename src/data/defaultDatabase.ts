@@ -17,6 +17,7 @@ export const DEFAULT_DATABASE: DatabaseSchema = {
     showEmployeeCodeInPrint: true,
     showSerialColumnInPrint: false,
     minimumTableRowsInPrint: 1,
+    customLogoUrl: '',
   },
   departments: [
     {

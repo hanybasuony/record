@@ -108,6 +108,7 @@ export interface OrganizationSettings {
   showEmployeeCodeInPrint: boolean;
   showSerialColumnInPrint: boolean;
   minimumTableRowsInPrint: number;
+  customLogoUrl?: string;
 }
 
 export interface DatabaseSchema {

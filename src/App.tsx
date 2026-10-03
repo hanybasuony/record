@@ -34,6 +34,7 @@ import {
   FileSpreadsheet,
   UserCheck,
   Check,
+  Image as ImageIcon,
 } from 'lucide-react';
 import {
   DatabaseSchema,
@@ -51,6 +52,7 @@ import {
   getArabicDayName,
 } from './utils/arabicTafqeet';
 import { PrintableReceiptSheet } from './components/PrintableReceiptSheet';
+import { OfficialLogo } from './components/OfficialLogo';
 import { exportReportToPdf } from './utils/exportPdf';
 import { exportReportToDocx } from './utils/exportDocx';
 import { DEFAULT_DATABASE } from './data/defaultDatabase';
@@ -889,8 +891,12 @@ export default function App() {
         <div className="bg-gradient-to-r from-[#07192b] via-[#0b2742] to-[#0f3459] text-white px-4 lg:px-8 py-2.5 flex items-center justify-between gap-4 border-b border-sky-950">
           {/* Institutional Brand */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-sky-400/20 to-sky-600/30 border border-sky-400/40 flex items-center justify-center shadow-inner shrink-0 select-none">
-              <span className="text-xl font-black text-amber-300 drop-shadow-md">ع</span>
+            <div className="w-11 h-11 p-0.5 rounded-xl bg-white/10 border border-sky-400/30 flex items-center justify-center shadow-inner shrink-0 select-none">
+              <OfficialLogo
+                className="w-full h-full"
+                customLogoUrl={db.settings.customLogoUrl}
+                showText={false}
+              />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -4318,6 +4324,92 @@ export default function App() {
                   }
                   className="w-full px-3 py-2 text-sm font-mono-num bg-slate-50 border border-slate-300 rounded-lg"
                 />
+              </div>
+
+              {/* Logo Management Panel */}
+              <div className="sm:col-span-2 bg-gradient-to-br from-slate-50 to-sky-50/40 border border-slate-200 rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-sky-700" />
+                    <span className="text-xs font-bold text-slate-800">
+                      شعار المؤسسة المعتمد بالتقرير (Logo):
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-semibold text-slate-500">
+                    يظهر بالترويسة العلوية والعلامة المائية لمحاضر الاستلام والمناقلة
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  {/* Logo Preview */}
+                  <div className="w-24 h-24 p-1.5 bg-white border border-slate-300 rounded-lg shadow-2xs flex items-center justify-center shrink-0">
+                    <OfficialLogo
+                      className="w-full h-full"
+                      customLogoUrl={db.settings.customLogoUrl}
+                    />
+                  </div>
+
+                  {/* Actions & Description */}
+                  <div className="space-y-2 flex-1 text-center sm:text-right">
+                    <div className="text-xs font-semibold text-slate-700">
+                      {db.settings.customLogoUrl ? (
+                        <span className="inline-flex items-center gap-1.5 text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                          <Check className="w-3.5 h-3.5" />
+                          يتم حالياً استخدام شعار مخصص مرفوع
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-sky-800 font-bold bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200">
+                          <Check className="w-3.5 h-3.5" />
+                          الشعار الرسمي المعتمد (الشركة القابضة • كفر الشيخ • دسوق)
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      تم تصميم الشعار المتجهي بأعلى درجات الدقة والوضوح الهندسي ليتوافق مع الطباعة الورقية واستخراج مستندات PDF بدقة فائقة. يمكنك أيضاً رفع شعار مخصص لفرعك أو محطتك في أي وقت.
+                    </p>
+
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                      <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold border border-slate-300 rounded-md shadow-2xs transition-colors">
+                        <Upload className="w-3.5 h-3.5 text-sky-700" />
+                        <span>رفع شعار مخصص...</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              const result = reader.result as string;
+                              setDb({
+                                ...db,
+                                settings: { ...db.settings, customLogoUrl: result },
+                              });
+                            };
+                            reader.readAsDataURL(file);
+                          }}
+                        />
+                      </label>
+
+                      {db.settings.customLogoUrl && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDb({
+                              ...db,
+                              settings: { ...db.settings, customLogoUrl: '' },
+                            });
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold border border-rose-200 rounded-md transition-colors"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>استعادة الشعار الرسمي الافتراضي</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Professional Styling Options */}
