@@ -473,7 +473,7 @@ export const PrintableArchiveLedger: React.FC<PrintableArchiveLedgerProps> = ({
                     </p>
                     <div className="pt-6 border-b border-dashed border-slate-300 w-3/4 mx-auto"></div>
                     <p className="text-[10px] font-bold text-slate-800">
-                      {settings.defaultApproverName || 'م. سامي كامل عبد العزيز'}
+                      {settings.defaultApproverName || 'مهندس/ هاني البسيوني'}
                     </p>
 
                     {/* Official Rubber Stamp */}

@@ -176,11 +176,11 @@ const initialData: DatabaseSchema = {
     { id: 'rec-20', name: 'نادية محمود بدر', jobTitle: 'كيميائية تحاليل مياه شرب ومعايرة', departmentName: 'إدارة المعامل والجودة', employeeCode: '10698', nationalId: '29309081503412', phone: '01155667788' },
   ],
   committeeMembers: [
-    { id: 'cm-1', prefix: 'السيد الأستاذ /', name: 'أشرف كمال أبو زيد', jobTitle: 'مدير إدارة المخازن والعهد', defaultCommitteeRole: 'رئيسا', departmentName: 'إدارة المخازن والمشتريات والعهد' },
-    { id: 'cm-2', prefix: 'السيد المهندس /', name: 'طارق عبد العزيز الشهاوي', jobTitle: 'مدير إدارة شبكات مياه دسوق', defaultCommitteeRole: 'عضوا', departmentName: 'إدارة شبكات مياه دسوق' },
-    { id: 'cm-3', prefix: 'السيد الأستاذ /', name: 'عادل عبد الحميد النحاس', jobTitle: 'مراقب عهدة ومخازن رئيسي', defaultCommitteeRole: 'عضوا', departmentName: 'إدارة المخازن والمشتريات والعهد' },
-    { id: 'cm-4', prefix: 'السيد المهندس /', name: 'وليد حسن الصاوي', jobTitle: 'مدير إدارة نظم المعلومات', defaultCommitteeRole: 'عضوا فنيا', departmentName: 'إدارة نظم المعلومات والتحول الرقمي' },
-    { id: 'cm-5', prefix: 'السيد الأستاذ /', name: 'محمود السيد الجندي', jobTitle: 'رئيس قسم المراجعة المالية', defaultCommitteeRole: 'عضوا', departmentName: 'إدارة الشئون المالية والإدارية' },
+    { id: 'cm-1', prefix: 'السيد الأستاذ /', name: 'علي عبداللطيف غزال', jobTitle: 'مدير إدارة المخازن والعهد', defaultCommitteeRole: 'رئيسا', departmentName: 'إدارة المخازن والمشتريات والعهد' },
+    { id: 'cm-2', prefix: 'السيد الأستاذ /', name: 'محمد مسعود ابوسمرة', jobTitle: 'مراقب عهدة ومخازن رئيسي', defaultCommitteeRole: 'عضوا', departmentName: 'إدارة المخازن والمشتريات والعهد' },
+    { id: 'cm-3', prefix: 'السيد الأستاذ /', name: 'محمود عبداللطيف زينهم', jobTitle: 'رئيس قسم المراجعة المالية والمخزنية', defaultCommitteeRole: 'عضوا', departmentName: 'إدارة الشئون المالية والإدارية' },
+    { id: 'cm-4', prefix: 'السيد المهندس /', name: 'طارق عبد العزيز الشهاوي', jobTitle: 'مدير إدارة شبكات مياه دسوق', defaultCommitteeRole: 'عضوا', departmentName: 'إدارة شبكات مياه دسوق' },
+    { id: 'cm-5', prefix: 'السيد المهندس /', name: 'وليد حسن الصاوي', jobTitle: 'مدير إدارة نظم المعلومات', defaultCommitteeRole: 'عضوا فنيا', departmentName: 'إدارة نظم المعلومات والتحول الرقمي' },
     { id: 'cm-6', prefix: 'السيد المهندس /', name: 'سامح محمد النجار', jobTitle: 'مدير إدارة المحطات والروافع', defaultCommitteeRole: 'رئيسا', departmentName: 'إدارة محطات المياه والروافع' },
   ],
   committeePresets: [
@@ -189,9 +189,9 @@ const initialData: DatabaseSchema = {
       presetName: 'اللجنة الأساسية لفحص واستلام العهد الشخصية',
       description: 'اللجنة المعتمدة لتسليم العهد الشخصية والمهمات الإدارية والفنية بمنطقة مياه دسوق',
       members: [
-        { id: 'pm-1', prefix: 'السيد الأستاذ /', name: 'أشرف كمال أبو زيد', committeeRole: 'رئيسا', jobTitle: 'مدير إدارة المخازن والعهد' },
-        { id: 'pm-2', prefix: 'السيد المهندس /', name: 'طارق عبد العزيز الشهاوي', committeeRole: 'عضوا', jobTitle: 'مدير إدارة شبكات مياه دسوق' },
-        { id: 'pm-3', prefix: 'السيد الأستاذ /', name: 'عادل عبد الحميد النحاس', committeeRole: 'عضوا', jobTitle: 'مراقب عهدة ومخازن رئيسي' },
+        { id: 'pm-1', prefix: 'السيد الأستاذ /', name: 'علي عبداللطيف غزال', committeeRole: 'رئيسا', jobTitle: 'مدير إدارة المخازن والعهد' },
+        { id: 'pm-2', prefix: 'السيد الأستاذ /', name: 'محمد مسعود ابوسمرة', committeeRole: 'عضوا', jobTitle: 'مراقب عهدة ومخازن رئيسي' },
+        { id: 'pm-3', prefix: 'السيد الأستاذ /', name: 'محمود عبداللطيف زينهم', committeeRole: 'عضوا', jobTitle: 'رئيس قسم المراجعة المالية والمخزنية' },
       ],
     },
     {

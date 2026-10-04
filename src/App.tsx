@@ -37,6 +37,7 @@ import {
   Pencil,
   Edit,
   Edit3,
+  Sparkles,
   Image as ImageIcon,
 } from 'lucide-react';
 import {
@@ -57,6 +58,7 @@ import {
 import { PrintableReceiptSheet } from './components/PrintableReceiptSheet';
 import { PrintableArchiveLedger } from './components/PrintableArchiveLedger';
 import { OfficialLogo } from './components/OfficialLogo';
+import { CommitteeMemberCombobox } from './components/CommitteeMemberCombobox';
 import { exportReportToPdf } from './utils/exportPdf';
 import { exportReportToDocx } from './utils/exportDocx';
 import { DEFAULT_DATABASE } from './data/defaultDatabase';
@@ -100,7 +102,7 @@ function createEmptyReport(
   defaultPreset?: CommitteePreset,
   defaultTitle = 'محضر استلام',
   defaultApproverTitle = 'مدير عام المنطقة',
-  defaultApproverName = '',
+  defaultApproverName = 'مهندس/ هاني البسيوني',
   reportType: 'receipt' | 'transfer' = 'receipt'
 ): CustodyReport {
   const today = '2026-10-02';
@@ -114,23 +116,23 @@ function createEmptyReport(
           {
             id: `cm-init-1`,
             prefix: 'السيد الأستاذ /',
-            name: 'أشرف كمال أبو زيد',
+            name: 'علي عبداللطيف غزال',
             committeeRole: 'رئيسا',
             jobTitle: 'مدير إدارة المخازن والعهد',
           },
           {
             id: `cm-init-2`,
-            prefix: 'السيد المهندس /',
-            name: 'طارق عبد العزيز الشهاوي',
+            prefix: 'السيد الأستاذ /',
+            name: 'محمد مسعود ابوسمرة',
             committeeRole: 'عضوا',
-            jobTitle: 'مدير إدارة شبكات مياه دسوق',
+            jobTitle: 'مراقب عهدة ومخازن رئيسي',
           },
           {
             id: `cm-init-3`,
             prefix: 'السيد الأستاذ /',
-            name: 'عادل عبد الحميد النحاس',
+            name: 'محمود عبداللطيف زينهم',
             committeeRole: 'عضوا',
-            jobTitle: 'مراقب عهدة ومخازن رئيسي',
+            jobTitle: 'رئيس قسم المراجعة المالية والمخزنية',
           },
         ];
 
@@ -146,7 +148,7 @@ function createEmptyReport(
     items: [
       {
         id: `item-${Date.now()}-1`,
-        itemName: '',
+        itemName: 'ماكينة شحن فوري موديل (A960) سريال نمبر (............)',
         unit: 'عدد',
         quantity: 1,
         tafqeet: numberToArabicTafqeet(1),
@@ -167,7 +169,7 @@ function createEmptyReport(
     delivererNationalId: '',
     transferReason: reportType === 'transfer' ? 'إعادة توزيع عهدة ومهمات' : '',
     approverTitle: defaultApproverTitle,
-    approverName: defaultApproverName,
+    approverName: defaultApproverName || 'مهندس/ هاني البسيوني',
     status: 'معتمد',
     custodyType: reportType === 'transfer' ? 'مهمات تشغيل وصيانة' : 'عهدة شخصية مستديمة',
     signatureTableRoleDisplay: 'jobTitle',
@@ -184,6 +186,9 @@ export default function App() {
       if (cached) {
         const parsed = JSON.parse(cached) as DatabaseSchema;
         if (parsed && Array.isArray(parsed.reports)) {
+          if (!parsed.settings.defaultApproverName) {
+            parsed.settings.defaultApproverName = 'مهندس/ هاني البسيوني';
+          }
           return parsed;
         }
       }
@@ -199,7 +204,14 @@ export default function App() {
       if (cached) {
         const parsed = JSON.parse(cached) as DatabaseSchema;
         if (parsed && Array.isArray(parsed.reports) && parsed.reports.length > 0) {
-          return parsed.reports[0];
+          const first = parsed.reports[0];
+          if (!first.approverName) {
+            first.approverName = 'مهندس/ هاني البسيوني';
+          }
+          if (first.items && first.items.length > 0 && !first.items[0].itemName) {
+            first.items[0].itemName = 'ماكينة شحن فوري موديل (A960) سريال نمبر (............)';
+          }
+          return first;
         }
       }
     } catch {
@@ -752,24 +764,128 @@ export default function App() {
       prefix: memberRecord.prefix || 'السيد الأستاذ /',
       name: memberRecord.name,
       jobTitle: memberRecord.jobTitle,
-      committeeRole: updated[index].committeeRole || memberRecord.defaultCommitteeRole || 'عضوا',
+      committeeRole:
+        index === 0 && memberRecord.name === 'علي عبداللطيف غزال'
+          ? 'رئيسا'
+          : updated[index].committeeRole || memberRecord.defaultCommitteeRole || (index === 0 ? 'رئيسا' : 'عضوا'),
+      department: memberRecord.departmentName,
     };
     setCurrentReport({ ...currentReport, committeeMembers: updated });
     setActiveCommitteeDropdownIndex(null);
   };
 
+  const handleApplyOfficialDefaultCommittee = () => {
+    if (!currentReport) return;
+    setCurrentReport({
+      ...currentReport,
+      committeeMembers: [
+        {
+          id: `cm-official-1-${Date.now()}`,
+          prefix: 'السيد الأستاذ /',
+          name: 'علي عبداللطيف غزال',
+          committeeRole: 'رئيسا',
+          jobTitle: 'مدير إدارة المخازن والعهد',
+          department: 'إدارة المخازن والمشتريات والعهد',
+        },
+        {
+          id: `cm-official-2-${Date.now()}`,
+          prefix: 'السيد الأستاذ /',
+          name: 'محمد مسعود ابوسمرة',
+          committeeRole: 'عضوا',
+          jobTitle: 'مراقب عهدة ومخازن رئيسي',
+          department: 'إدارة المخازن والمشتريات والعهد',
+        },
+        {
+          id: `cm-official-3-${Date.now()}`,
+          prefix: 'السيد الأستاذ /',
+          name: 'محمود عبداللطيف زينهم',
+          committeeRole: 'عضوا',
+          jobTitle: 'رئيس قسم المراجعة المالية والمخزنية',
+          department: 'إدارة الشئون المالية والإدارية',
+        },
+      ],
+    });
+    showToast('تم تعيين اللجنة الثلاثية الافتراضية الرسمية (غزال - ابوسمرة - زينهم)');
+  };
+
+  const handleApplyDefaultMemberToSlot = (idx: number) => {
+    if (!currentReport) return;
+    const defaults = [
+      {
+        prefix: 'السيد الأستاذ /',
+        name: 'علي عبداللطيف غزال',
+        committeeRole: 'رئيسا',
+        jobTitle: 'مدير إدارة المخازن والعهد',
+        department: 'إدارة المخازن والمشتريات والعهد',
+      },
+      {
+        prefix: 'السيد الأستاذ /',
+        name: 'محمد مسعود ابوسمرة',
+        committeeRole: 'عضوا',
+        jobTitle: 'مراقب عهدة ومخازن رئيسي',
+        department: 'إدارة المخازن والمشتريات والعهد',
+      },
+      {
+        prefix: 'السيد الأستاذ /',
+        name: 'محمود عبداللطيف زينهم',
+        committeeRole: 'عضوا',
+        jobTitle: 'رئيس قسم المراجعة المالية والمخزنية',
+        department: 'إدارة الشئون المالية والإدارية',
+      },
+    ];
+    if (idx < 0 || idx >= defaults.length) return;
+    const target = defaults[idx];
+    const updated = [...currentReport.committeeMembers];
+    updated[idx] = {
+      ...updated[idx],
+      prefix: target.prefix,
+      name: target.name,
+      committeeRole: target.committeeRole,
+      jobTitle: target.jobTitle,
+      department: target.department,
+    };
+    setCurrentReport({ ...currentReport, committeeMembers: updated });
+    showToast(`تم تعيين عضو اللجنة رقم (${idx + 1}): ${target.name}`);
+  };
+
   const addCommitteeMemberRow = () => {
     if (!currentReport) return;
+    const nextIdx = currentReport.committeeMembers.length;
+    let defMember = {
+      prefix: 'السيد الأستاذ /',
+      name: '',
+      committeeRole: 'عضوا',
+      jobTitle: '',
+    };
+    if (nextIdx === 0) {
+      defMember = {
+        prefix: 'السيد الأستاذ /',
+        name: 'علي عبداللطيف غزال',
+        committeeRole: 'رئيسا',
+        jobTitle: 'مدير إدارة المخازن والعهد',
+      };
+    } else if (nextIdx === 1) {
+      defMember = {
+        prefix: 'السيد الأستاذ /',
+        name: 'محمد مسعود ابوسمرة',
+        committeeRole: 'عضوا',
+        jobTitle: 'مراقب عهدة ومخازن رئيسي',
+      };
+    } else if (nextIdx === 2) {
+      defMember = {
+        prefix: 'السيد الأستاذ /',
+        name: 'محمود عبداللطيف زينهم',
+        committeeRole: 'عضوا',
+        jobTitle: 'رئيس قسم المراجعة المالية والمخزنية',
+      };
+    }
     setCurrentReport({
       ...currentReport,
       committeeMembers: [
         ...currentReport.committeeMembers,
         {
           id: `cm-${Date.now()}`,
-          prefix: 'السيد الأستاذ /',
-          name: '',
-          committeeRole: 'عضوا',
-          jobTitle: '',
+          ...defMember,
         },
       ],
     });
@@ -844,17 +960,21 @@ export default function App() {
 
   const addItemRow = () => {
     if (!currentReport) return;
+    const defaultName =
+      currentReport.items.length === 0
+        ? 'ماكينة شحن فوري موديل (A960) سريال نمبر (............)'
+        : '';
     setCurrentReport({
       ...currentReport,
       items: [
         ...currentReport.items,
         {
           id: `item-${Date.now()}-${currentReport.items.length + 1}`,
-          itemName: '',
+          itemName: defaultName,
           unit: 'عدد',
           quantity: 1,
           tafqeet: numberToArabicTafqeet(1),
-          notes: '',
+          notes: 'جديد وصالح للعمل',
         },
       ],
     });
@@ -2353,7 +2473,16 @@ export default function App() {
                         تظهر الأسماء والصفات الوظيفية تلقائياً في ديباجة المحضر وجدول التوقيعات بالأسفل
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleApplyOfficialDefaultCommittee}
+                        className="px-2.5 py-1.5 text-xs font-black text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs whitespace-nowrap"
+                        title="تعيين التشكيل الثلاثي الافتراضي: 1- علي عبداللطيف غزال (رئيسا) | 2- محمد مسعود ابوسمرة (عضوا) | 3- محمود عبداللطيف زينهم (عضوا)"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                        <span>اللجنة الافتراضية الثلاثية (غزال - ابوسمرة - زينهم)</span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => setIsSavingPreset((v) => !v)}
@@ -2457,18 +2586,59 @@ export default function App() {
                     {currentReport.committeeMembers.map((member, idx) => (
                       <div
                         key={member.id || idx}
-                        className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2.5"
+                        className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2.5 shadow-2xs"
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-700 font-mono-num">
-                            عضو اللجنة رقم ({idx + 1})
-                          </span>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-bold text-slate-800 font-mono-num flex items-center gap-1.5">
+                              <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[11px]">
+                                {idx + 1}
+                              </span>
+                              عضو اللجنة رقم ({idx + 1})
+                            </span>
+
+                            {/* One-click slot defaults for members 1, 2, and 3 */}
+                            {idx === 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleApplyDefaultMemberToSlot(0)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-black text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md transition-colors shadow-2xs"
+                                title="تعيين القيمة الافتراضية: علي عبداللطيف غزال (رئيسا)"
+                              >
+                                <Sparkles className="w-3 h-3 text-amber-600" />
+                                <span>الافتراضي: علي عبداللطيف غزال (رئيسا)</span>
+                              </button>
+                            )}
+                            {idx === 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleApplyDefaultMemberToSlot(1)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-black text-sky-900 bg-sky-100 hover:bg-sky-200 border border-sky-300 rounded-md transition-colors shadow-2xs"
+                                title="تعيين القيمة الافتراضية: محمد مسعود ابوسمرة (عضوا)"
+                              >
+                                <Sparkles className="w-3 h-3 text-sky-600" />
+                                <span>الافتراضي: محمد مسعود ابوسمرة (عضوا)</span>
+                              </button>
+                            )}
+                            {idx === 2 && (
+                              <button
+                                type="button"
+                                onClick={() => handleApplyDefaultMemberToSlot(2)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-black text-indigo-900 bg-indigo-100 hover:bg-indigo-200 border border-indigo-300 rounded-md transition-colors shadow-2xs"
+                                title="تعيين القيمة الافتراضية: محمود عبداللطيف زينهم (عضوا)"
+                              >
+                                <Sparkles className="w-3 h-3 text-indigo-600" />
+                                <span>الافتراضي: محمود عبداللطيف زينهم (عضوا)</span>
+                              </button>
+                            )}
+                          </div>
+
                           {currentReport.committeeMembers.length > 1 && (
                             <button
                               type="button"
                               onClick={() => removeCommitteeMemberRow(idx)}
-                              className="text-xs text-rose-600 hover:text-rose-800 flex items-center gap-1"
-                              title="حذف العضو"
+                              className="text-xs text-rose-600 hover:text-rose-800 flex items-center gap-1 px-2 py-0.5 rounded hover:bg-rose-50 transition-colors"
+                              title="حذف هذا العضو من اللجنة"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                               <span>حذف</span>
@@ -2477,9 +2647,10 @@ export default function App() {
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
-                          <div className="sm:col-span-3">
-                            <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
-                              اللقب بالديباجة
+                          {/* Prefix */}
+                          <div className="sm:col-span-2">
+                            <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                              اللقب
                             </label>
                             <input
                               type="text"
@@ -2488,53 +2659,57 @@ export default function App() {
                               onChange={(e) =>
                                 updateCommitteeMember(idx, 'prefix', e.target.value)
                               }
-                              className="w-full px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-md"
+                              placeholder="السيد الأستاذ /"
+                              className="w-full px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-lg shadow-2xs focus:border-sky-600 focus:outline-none"
                             />
                           </div>
 
-                          <div className="sm:col-span-4 relative">
-                            <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
-                              اسم عضو اللجنة (حر أو من الدليل)
-                            </label>
-                            <input
-                              type="text"
-                              value={member.name}
-                              onFocus={() => setActiveCommitteeDropdownIndex(idx)}
-                              onBlur={() =>
-                                setTimeout(() => setActiveCommitteeDropdownIndex(null), 180)
-                              }
-                              onChange={(e) => updateCommitteeMember(idx, 'name', e.target.value)}
-                              placeholder="اسم العضو..."
-                              className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-md focus:border-sky-700 focus:outline-none"
-                            />
-
-                            {activeCommitteeDropdownIndex === idx &&
-                              db.committeeMembers.length > 0 && (
-                                <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-md shadow-lg max-h-44 overflow-y-auto divide-y divide-slate-100">
-                                  {db.committeeMembers.map((cmRec) => (
-                                    <button
-                                      key={cmRec.id}
-                                      type="button"
-                                      onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        selectSavedCommitteeMember(idx, cmRec);
-                                      }}
-                                      className="w-full text-right px-2.5 py-1.5 hover:bg-sky-50 transition-colors"
-                                    >
-                                      <div className="text-xs font-bold text-slate-900">
-                                        {cmRec.name}
-                                      </div>
-                                      <div className="text-[10px] text-slate-500">
-                                        {cmRec.jobTitle} · ({cmRec.defaultCommitteeRole})
-                                      </div>
-                                    </button>
-                                  ))}
-                                </div>
+                          {/* Professional Combobox for Committee Member Name */}
+                          <div className="sm:col-span-5">
+                            <div className="flex items-center justify-between mb-0.5">
+                              <label className="block text-[11px] font-bold text-slate-700">
+                                اسم عضو اللجنة (كامبو بوكس احترافي)
+                              </label>
+                              {idx === 0 && (
+                                <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                                  رئيس اللجنة (غزال)
+                                </span>
                               )}
+                              {idx === 1 && (
+                                <span className="text-[10px] font-bold text-sky-800 bg-sky-50 px-1.5 py-0.2 rounded border border-sky-200">
+                                  عضو (ابوسمرة)
+                                </span>
+                              )}
+                              {idx === 2 && (
+                                <span className="text-[10px] font-bold text-indigo-800 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
+                                  عضو (زينهم)
+                                </span>
+                              )}
+                            </div>
+                            <CommitteeMemberCombobox
+                              memberIndex={idx}
+                              member={member}
+                              registeredMembers={db.committeeMembers}
+                              onSelectMember={(selectedData) => {
+                                const updated = [...currentReport.committeeMembers];
+                                updated[idx] = {
+                                  ...updated[idx],
+                                  name: selectedData.name,
+                                  prefix: selectedData.prefix || updated[idx].prefix,
+                                  jobTitle: selectedData.jobTitle,
+                                  committeeRole: selectedData.committeeRole || updated[idx].committeeRole,
+                                  department: selectedData.department,
+                                };
+                                setCurrentReport({ ...currentReport, committeeMembers: updated });
+                              }}
+                              onUpdateName={(name) => updateCommitteeMember(idx, 'name', name)}
+                              placeholder={`ابحث أو اختر عضو اللجنة رقم (${idx + 1})...`}
+                            />
                           </div>
 
+                          {/* Committee Role */}
                           <div className="sm:col-span-2">
-                            <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+                            <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
                               صفة اللجنة
                             </label>
                             <input
@@ -2545,12 +2720,13 @@ export default function App() {
                                 updateCommitteeMember(idx, 'committeeRole', e.target.value)
                               }
                               placeholder="رئيسا / عضوا"
-                              className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-md"
+                              className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-lg shadow-2xs focus:border-sky-600 focus:outline-none"
                             />
                           </div>
 
+                          {/* Job Title */}
                           <div className="sm:col-span-3">
-                            <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+                            <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
                               الصفة الوظيفية
                             </label>
                             <input
@@ -2559,8 +2735,8 @@ export default function App() {
                               onChange={(e) =>
                                 updateCommitteeMember(idx, 'jobTitle', e.target.value)
                               }
-                              placeholder="مثال: مدير المخازن / مراقب عهدة"
-                              className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
+                              placeholder="مثال: مدير إدارة المخازن..."
+                              className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg shadow-2xs focus:border-sky-600 focus:outline-none"
                             />
                           </div>
                         </div>
@@ -2660,14 +2836,31 @@ export default function App() {
 
                         <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
                           <div className="sm:col-span-12">
-                            <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
-                              اسم الصنف وبياناته بالتفصيل
-                            </label>
+                            <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
+                              <label className="block text-[11px] font-bold text-slate-700">
+                                اسم الصنف وبياناته بالتفصيل
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateItemRow(
+                                    idx,
+                                    'itemName',
+                                    'ماكينة شحن فوري موديل (A960) سريال نمبر (............)'
+                                  )
+                                }
+                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-sky-900 bg-sky-100 hover:bg-sky-200 border border-sky-300 rounded transition-colors shadow-2xs"
+                                title="تعيين الصنف الافتراضي: ماكينة شحن فوري موديل (A960)"
+                              >
+                                <Sparkles className="w-3 h-3 text-sky-600" />
+                                <span>الافتراضي: ماكينة شحن فوري موديل (A960) سريال نمبر (............)</span>
+                              </button>
+                            </div>
                             <input
                               type="text"
                               value={item.itemName}
                               onChange={(e) => updateItemRow(idx, 'itemName', e.target.value)}
-                              placeholder="مثال: جهاز حاسب آلي محمول / طقم عدة ميكانيكية..."
+                              placeholder="ماكينة شحن فوري موديل (A960) سريال نمبر (............)"
                               className="w-full px-3 py-2 text-sm font-semibold bg-white border border-slate-300 rounded-md focus:border-sky-700 focus:outline-none"
                             />
                           </div>
@@ -2760,17 +2953,33 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        اسم مدير عام المنطقة (اختياري)
-                      </label>
+                      <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
+                        <label className="block text-xs font-bold text-slate-700">
+                          اسم مدير عام المنطقة (اختياري)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCurrentReport({
+                              ...currentReport,
+                              approverName: 'مهندس/ هاني البسيوني',
+                            })
+                          }
+                          className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded transition-colors shadow-2xs"
+                          title="تعيين الاسم الافتراضي: مهندس/ هاني البسيوني"
+                        >
+                          <Sparkles className="w-3 h-3 text-amber-600" />
+                          <span>الافتراضي: مهندس/ هاني البسيوني</span>
+                        </button>
+                      </div>
                       <input
                         type="text"
                         value={currentReport.approverName}
                         onChange={(e) =>
                           setCurrentReport({ ...currentReport, approverName: e.target.value })
                         }
-                        placeholder="يترك فارغاً للتوقيع الحي أو يكتب الاسم..."
-                        className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg"
+                        placeholder="مهندس/ هاني البسيوني"
+                        className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-sky-600 focus:outline-none"
                       />
                     </div>
                     <div className="sm:col-span-2">
@@ -5669,6 +5878,42 @@ export default function App() {
                     })
                   }
                   className="w-full px-3 py-2 text-sm font-mono-num bg-slate-50 border border-slate-300 rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  صفة المسؤول المعتمد الافتراضية
+                </label>
+                <input
+                  type="text"
+                  value={db.settings.defaultApproverTitle}
+                  onChange={(e) =>
+                    setDb({
+                      ...db,
+                      settings: { ...db.settings, defaultApproverTitle: e.target.value },
+                    })
+                  }
+                  placeholder="مدير عام المنطقة"
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  اسم مدير عام المنطقة الافتراضي
+                </label>
+                <input
+                  type="text"
+                  value={db.settings.defaultApproverName}
+                  onChange={(e) =>
+                    setDb({
+                      ...db,
+                      settings: { ...db.settings, defaultApproverName: e.target.value },
+                    })
+                  }
+                  placeholder="مهندس/ هاني البسيوني"
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg"
                 />
               </div>
 
