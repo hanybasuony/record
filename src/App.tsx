@@ -34,6 +34,9 @@ import {
   FileSpreadsheet,
   UserCheck,
   Check,
+  Pencil,
+  Edit,
+  Edit3,
   Image as ImageIcon,
 } from 'lucide-react';
 import {
@@ -275,6 +278,20 @@ export default function App() {
   const [isAddDepartmentModalOpen, setIsAddDepartmentModalOpen] = useState(false);
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
+  // Edit Recipient / Employee states
+  const [editingRecipient, setEditingRecipient] = useState<RecipientRecord | null>(null);
+  const [isEditRecipientModalOpen, setIsEditRecipientModalOpen] = useState(false);
+  const [updateEmployeeInPastReports, setUpdateEmployeeInPastReports] = useState(true);
+
+  // Edit Department / Station states
+  const [editingDepartment, setEditingDepartment] = useState<DepartmentRecord | null>(null);
+  const [isEditDepartmentModalOpen, setIsEditDepartmentModalOpen] = useState(false);
+  const [updateDepartmentInLinkedRecords, setUpdateDepartmentInLinkedRecords] = useState(true);
+
+  // Archive Quick Edit state
+  const [quickEditingReport, setQuickEditingReport] = useState<CustodyReport | null>(null);
+  const [isQuickEditReportModalOpen, setIsQuickEditReportModalOpen] = useState(false);
+
   // Committees & Catalog tab states
   const [newCommitteeMember, setNewCommitteeMember] = useState<Omit<CommitteeMemberRecord, 'id'>>({
     prefix: 'السيد الأستاذ /',
@@ -391,6 +408,147 @@ export default function App() {
       { ...db, reports: updatedReports },
       `تم حفظ محضر الاستلام رقم (${currentReport.reportNumber}) بنجاح`
     );
+  };
+
+  // Save changes to edited recipient / employee
+  const handleSaveEditedRecipient = async () => {
+    if (!editingRecipient || !db) return;
+    if (!editingRecipient.name.trim()) {
+      showToast('يرجى إدخال اسم الموظف');
+      return;
+    }
+    const originalRecipient = db.recipients.find((r) => r.id === editingRecipient.id);
+    const oldName = originalRecipient?.name?.trim();
+    const newName = editingRecipient.name.trim();
+
+    const updatedRecipients = db.recipients.map((r) =>
+      r.id === editingRecipient.id ? { ...editingRecipient, name: newName } : r
+    );
+
+    let updatedReports = db.reports;
+    if (updateEmployeeInPastReports && oldName && oldName !== newName) {
+      updatedReports = db.reports.map((rep) => {
+        let changed = false;
+        const modifiedRep = { ...rep };
+        if (rep.recipientName?.trim() === oldName) {
+          modifiedRep.recipientName = newName;
+          if (editingRecipient.jobTitle) modifiedRep.recipientJobTitle = editingRecipient.jobTitle;
+          if (editingRecipient.departmentName) modifiedRep.departmentName = editingRecipient.departmentName;
+          if (editingRecipient.employeeCode) modifiedRep.recipientEmployeeCode = editingRecipient.employeeCode;
+          if (editingRecipient.nationalId) modifiedRep.recipientNationalId = editingRecipient.nationalId;
+          changed = true;
+        }
+        if (rep.delivererName?.trim() === oldName) {
+          modifiedRep.delivererName = newName;
+          if (editingRecipient.jobTitle) modifiedRep.delivererJobTitle = editingRecipient.jobTitle;
+          if (editingRecipient.departmentName) modifiedRep.delivererDepartmentName = editingRecipient.departmentName;
+          if (editingRecipient.employeeCode) modifiedRep.delivererEmployeeCode = editingRecipient.employeeCode;
+          if (editingRecipient.nationalId) modifiedRep.delivererNationalId = editingRecipient.nationalId;
+          changed = true;
+        }
+        return changed ? modifiedRep : rep;
+      });
+    }
+
+    // Also update currentReport if it was this recipient
+    if (currentReport) {
+      if (currentReport.recipientName?.trim() === oldName) {
+        setCurrentReport({
+          ...currentReport,
+          recipientName: newName,
+          recipientJobTitle: editingRecipient.jobTitle || currentReport.recipientJobTitle,
+          departmentName: editingRecipient.departmentName || currentReport.departmentName,
+          recipientEmployeeCode: editingRecipient.employeeCode || currentReport.recipientEmployeeCode,
+          recipientNationalId: editingRecipient.nationalId || currentReport.recipientNationalId,
+        });
+      }
+    }
+
+    await syncDatabase(
+      {
+        ...db,
+        recipients: updatedRecipients,
+        reports: updatedReports,
+      },
+      `تم تحديث بيانات الموظف "${newName}" بنجاح`
+    );
+    setIsEditRecipientModalOpen(false);
+    setEditingRecipient(null);
+  };
+
+  // Save changes to edited department / station
+  const handleSaveEditedDepartment = async () => {
+    if (!editingDepartment || !db) return;
+    if (!editingDepartment.name.trim()) {
+      showToast('يرجى إدخال اسم الإدارة أو المحطة');
+      return;
+    }
+    const originalDept = db.departments.find((d) => d.id === editingDepartment.id);
+    const oldName = originalDept?.name?.trim();
+    const newName = editingDepartment.name.trim();
+
+    const updatedDepartments = db.departments.map((d) =>
+      d.id === editingDepartment.id ? { ...editingDepartment, name: newName } : d
+    );
+
+    let updatedRecipients = db.recipients;
+    let updatedReports = db.reports;
+
+    if (updateDepartmentInLinkedRecords && oldName && oldName !== newName) {
+      updatedRecipients = db.recipients.map((rec) =>
+        rec.departmentName?.trim() === oldName
+          ? { ...rec, departmentName: newName }
+          : rec
+      );
+
+      updatedReports = db.reports.map((rep) => {
+        let changed = false;
+        const mod = { ...rep };
+        if (rep.departmentName?.trim() === oldName) {
+          mod.departmentName = newName;
+          changed = true;
+        }
+        if (rep.delivererDepartmentName?.trim() === oldName) {
+          mod.delivererDepartmentName = newName;
+          changed = true;
+        }
+        return changed ? mod : rep;
+      });
+    }
+
+    await syncDatabase(
+      {
+        ...db,
+        departments: updatedDepartments,
+        recipients: updatedRecipients,
+        reports: updatedReports,
+      },
+      `تم تحديث بيانات الإدارة "${newName}" بنجاح`
+    );
+    setIsEditDepartmentModalOpen(false);
+    setEditingDepartment(null);
+  };
+
+  // Save changes to quick-edited report from archive
+  const handleSaveQuickEditReport = async () => {
+    if (!quickEditingReport || !db) return;
+    const updatedReports = db.reports.map((r) =>
+      r.id === quickEditingReport.id
+        ? { ...quickEditingReport, updatedAt: new Date().toISOString() }
+        : r
+    );
+    if (currentReport?.id === quickEditingReport.id) {
+      setCurrentReport({ ...quickEditingReport, updatedAt: new Date().toISOString() });
+    }
+    await syncDatabase(
+      {
+        ...db,
+        reports: updatedReports,
+      },
+      `تم تعديل بيانات المحضر رقم (${quickEditingReport.reportNumber}) بالسجل والأرشيف`
+    );
+    setIsQuickEditReportModalOpen(false);
+    setQuickEditingReport(null);
   };
 
   // Export current report to PDF via jspdf & html2canvas
@@ -3204,16 +3362,32 @@ export default function App() {
                           </td>
                           <td className="py-3 px-3">
                             <div className="flex items-center justify-center gap-1">
-                              {/* Open in Editor */}
+                              {/* Edit in Editor - زر تعديل المحضر */}
                               <button
                                 type="button"
                                 onClick={() => {
                                   setCurrentReport(rep);
                                   setActiveTab('editor');
+                                  showToast(`تم فتح المحضر رقم ${rep.reportNumber} في المحرر لإجراء التعديل`);
                                 }}
-                                className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 font-bold rounded border border-sky-200 transition-colors"
+                                className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 font-black text-xs rounded-md border border-amber-300 transition-colors flex items-center gap-1 shadow-2xs"
+                                title="تعديل بيانات وأصناف ولجنة هذا المحضر في المحرر الرسمي"
                               >
-                                فتح
+                                <Pencil className="w-3 h-3 text-amber-700" />
+                                <span>تعديل</span>
+                              </button>
+
+                              {/* Quick Edit in Modal - تعديل سريع للمحضر */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuickEditingReport({ ...rep });
+                                  setIsQuickEditReportModalOpen(true);
+                                }}
+                                className="p-1 bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-800 rounded border border-slate-300 transition-colors"
+                                title="تعديل سريع لبيانات وتاريخ وحالة المحضر بدون مغادرة السجل والأرشيف"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
                               </button>
 
                               {/* Direct PDF Export */}
@@ -3280,6 +3454,338 @@ export default function App() {
                 </table>
               </div>
             </div>
+
+            {/* ================= MODAL: QUICK EDIT ARCHIVED REPORT ================= */}
+            {isQuickEditReportModalOpen && quickEditingReport && (
+              <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 border border-slate-200 max-h-[92vh] overflow-y-auto">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shadow-2xs">
+                        <Pencil className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-black text-slate-900">
+                          تعديل بيانات المحضر بالسجل والأرشيف
+                        </h3>
+                        <p className="text-[11px] text-slate-500 font-medium">
+                          تعديل سريع للبيانات الأساسية والحالة وتاريخ الانعقاد للمحضر رقم ({quickEditingReport.reportNumber})
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickEditReportModalOpen(false);
+                        setQuickEditingReport(null);
+                      }}
+                      className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-4 text-xs">
+                    {/* Row 1: Report Number & Title & Type */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          نوع المستند *
+                        </label>
+                        <select
+                          value={quickEditingReport.reportType || 'receipt'}
+                          onChange={(e) =>
+                            setQuickEditingReport({
+                              ...quickEditingReport,
+                              reportType: e.target.value as 'receipt' | 'transfer',
+                            })
+                          }
+                          className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                        >
+                          <option value="receipt">محضر استلام عهدة</option>
+                          <option value="transfer">إذن مناقيل عهدة</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          رقم المحضر *
+                        </label>
+                        <input
+                          type="text"
+                          value={quickEditingReport.reportNumber}
+                          onChange={(e) =>
+                            setQuickEditingReport({ ...quickEditingReport, reportNumber: e.target.value })
+                          }
+                          className="w-full px-3 py-2 text-xs font-mono-num font-black bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          عنوان وموضوع المحضر
+                        </label>
+                        <input
+                          type="text"
+                          value={quickEditingReport.reportTitle}
+                          onChange={(e) =>
+                            setQuickEditingReport({ ...quickEditingReport, reportTitle: e.target.value })
+                          }
+                          className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Row 2: Status & Custody Type */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          حالة المحضر بالسجل
+                        </label>
+                        <select
+                          value={quickEditingReport.status}
+                          onChange={(e) =>
+                            setQuickEditingReport({
+                              ...quickEditingReport,
+                              status: e.target.value as CustodyReport['status'],
+                            })
+                          }
+                          className="w-full px-3 py-2 text-xs font-black bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                        >
+                          <option value="معتمد">معتمد (رسمي وموقع)</option>
+                          <option value="مسلم">مسلم (تم تسليم الأصناف)</option>
+                          <option value="مسودة">مسودة (قيد المراجعة)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          تصنيف ونوع العهدة
+                        </label>
+                        <select
+                          value={quickEditingReport.custodyType}
+                          onChange={(e) =>
+                            setQuickEditingReport({
+                              ...quickEditingReport,
+                              custodyType: e.target.value as CustodyReport['custodyType'],
+                            })
+                          }
+                          className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                        >
+                          <option value="عهدة شخصية مستديمة">عهدة شخصية مستديمة</option>
+                          <option value="عهدة فرعية">عهدة فرعية</option>
+                          <option value="مهمات تشغيل وصيانة">مهمات تشغيل وصيانة</option>
+                          <option value="أجهزة وحاسب آلي">أجهزة وحاسب آلي</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Row 3: Meeting Date & Day Name & Issue Date */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          تاريخ انعقاد اللجنة
+                        </label>
+                        <input
+                          type="date"
+                          value={quickEditingReport.meetingDate}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const calcDay = getArabicDayName(val) || quickEditingReport.dayName;
+                            setQuickEditingReport({
+                              ...quickEditingReport,
+                              meetingDate: val,
+                              dayName: calcDay,
+                            });
+                          }}
+                          className="w-full px-3 py-2 text-xs font-mono-num bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          يوم الانعقاد
+                        </label>
+                        <input
+                          type="text"
+                          value={quickEditingReport.dayName}
+                          onChange={(e) =>
+                            setQuickEditingReport({ ...quickEditingReport, dayName: e.target.value })
+                          }
+                          placeholder="مثال: الأحد"
+                          className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          تاريخ تحرير المحضر
+                        </label>
+                        <input
+                          type="date"
+                          value={quickEditingReport.issueDate}
+                          onChange={(e) =>
+                            setQuickEditingReport({ ...quickEditingReport, issueDate: e.target.value })
+                          }
+                          className="w-full px-3 py-2 text-xs font-mono-num bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Row 4: Recipient Details */}
+                    <div className="bg-sky-50/60 p-3 rounded-xl border border-sky-200/80 space-y-2.5">
+                      <div className="font-black text-sky-950 flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5 text-sky-700" />
+                        <span>بيانات الطرف المستلم:</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                            اسم المستلم رباعياً
+                          </label>
+                          <input
+                            type="text"
+                            value={quickEditingReport.recipientName}
+                            onChange={(e) =>
+                              setQuickEditingReport({ ...quickEditingReport, recipientName: e.target.value })
+                            }
+                            className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:border-amber-600"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                            الصفة الوظيفية
+                          </label>
+                          <input
+                            type="text"
+                            value={quickEditingReport.recipientJobTitle}
+                            onChange={(e) =>
+                              setQuickEditingReport({ ...quickEditingReport, recipientJobTitle: e.target.value })
+                            }
+                            className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:border-amber-600"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                            الإدارة التابعة ومقر العمل
+                          </label>
+                          <input
+                            type="text"
+                            value={quickEditingReport.departmentName}
+                            onChange={(e) =>
+                              setQuickEditingReport({ ...quickEditingReport, departmentName: e.target.value })
+                            }
+                            className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:border-amber-600"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Row 4b: Deliverer Details (if transfer or deliverer filled) */}
+                    {(quickEditingReport.reportType === 'transfer' || Boolean(quickEditingReport.delivererName)) && (
+                      <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-200/80 space-y-2.5">
+                        <div className="font-black text-emerald-950 flex items-center gap-1.5">
+                          <ArrowLeftRight className="w-3.5 h-3.5 text-emerald-700" />
+                          <span>بيانات الطرف المسلّم (مناقلة العهدة):</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                              اسم المسلّم
+                            </label>
+                            <input
+                              type="text"
+                              value={quickEditingReport.delivererName || ''}
+                              onChange={(e) =>
+                                setQuickEditingReport({ ...quickEditingReport, delivererName: e.target.value })
+                              }
+                              className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:border-amber-600"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                              الصفة الوظيفية للمسلّم
+                            </label>
+                            <input
+                              type="text"
+                              value={quickEditingReport.delivererJobTitle || ''}
+                              onChange={(e) =>
+                                setQuickEditingReport({ ...quickEditingReport, delivererJobTitle: e.target.value })
+                              }
+                              className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:border-amber-600"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                              الإدارة التابع لها المسلّم
+                            </label>
+                            <input
+                              type="text"
+                              value={quickEditingReport.delivererDepartmentName || ''}
+                              onChange={(e) =>
+                                setQuickEditingReport({
+                                  ...quickEditingReport,
+                                  delivererDepartmentName: e.target.value,
+                                })
+                              }
+                              className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:border-amber-600"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Row 5: General Notes */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        ملاحظات عامة وقرارات اللجنة
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={quickEditingReport.generalNotes || ''}
+                        onChange={(e) =>
+                          setQuickEditingReport({ ...quickEditingReport, generalNotes: e.target.value })
+                        }
+                        placeholder="ملاحظات المحضر وقرار التسليم..."
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCurrentReport(quickEditingReport);
+                        setIsQuickEditReportModalOpen(false);
+                        setActiveTab('editor');
+                        showToast(`تم فتح المحضر رقم ${quickEditingReport.reportNumber} في المحرر التفصيلي`);
+                      }}
+                      className="px-3 py-2 text-xs font-bold text-sky-800 hover:text-sky-950 bg-sky-50 hover:bg-sky-100 rounded-xl border border-sky-200 transition-colors flex items-center gap-1.5"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>فتح في المحرر التفصيلي (تعديل الأصناف واللجنة)</span>
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsQuickEditReportModalOpen(false);
+                          setQuickEditingReport(null);
+                        }}
+                        className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                      >
+                        إلغاء
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveQuickEditReport}
+                        className="px-5 py-2 text-xs font-black text-white bg-amber-700 hover:bg-amber-800 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>حفظ التعديلات بالسجل</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -3630,9 +4136,24 @@ export default function App() {
                                   </span>
                                 </td>
 
-                                {/* Actions: Create Receipt, Create Transfer, Insert */}
+                                 {/* Actions: Edit, Create Receipt, Create Transfer, Insert */}
                                 <td className="py-3 px-4 text-center">
                                   <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                    {/* Action: Edit Employee - زر تعديل الموظف */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingRecipient({ ...rec });
+                                        setUpdateEmployeeInPastReports(true);
+                                        setIsEditRecipientModalOpen(true);
+                                      }}
+                                      className="px-2.5 py-1 text-[11px] font-black bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-lg border border-amber-300 transition-colors flex items-center gap-1 shadow-2xs"
+                                      title="تعديل بيانات الموظف والوظيفة والرقم القومي والإدارة"
+                                    >
+                                      <Pencil className="w-3 h-3 text-amber-700" />
+                                      <span>تعديل</span>
+                                    </button>
+
                                     {/* Action 1: Create Receipt for this Employee */}
                                     <button
                                       type="button"
@@ -3759,6 +4280,19 @@ export default function App() {
                           <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
                             <button
                               type="button"
+                              onClick={() => {
+                                setEditingRecipient({ ...rec });
+                                setUpdateEmployeeInPastReports(true);
+                                setIsEditRecipientModalOpen(true);
+                              }}
+                              className="py-1.5 px-3 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-300 flex items-center justify-center gap-1 shadow-2xs transition-colors"
+                              title="تعديل بيانات الموظف"
+                            >
+                              <Pencil className="w-3.5 h-3.5 text-amber-700" />
+                              <span>تعديل</span>
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleCreateNewReport('receipt', { recipient: rec })}
                               className="flex-1 py-1.5 text-xs font-bold text-white bg-sky-700 hover:bg-sky-800 rounded-lg flex items-center justify-center gap-1 shadow-2xs"
                             >
@@ -3865,6 +4399,21 @@ export default function App() {
                             </td>
                             <td className="py-3 px-4 text-center">
                               <div className="flex items-center justify-center gap-1.5">
+                                {/* Edit Department Button - زر تعديل الإدارة */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingDepartment({ ...dept });
+                                    setUpdateDepartmentInLinkedRecords(true);
+                                    setIsEditDepartmentModalOpen(true);
+                                  }}
+                                  className="px-2.5 py-1 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-300 flex items-center gap-1 shadow-2xs transition-colors"
+                                  title="تعديل بيانات الإدارة / المحطة والكود والمدير"
+                                >
+                                  <Pencil className="w-3.5 h-3.5 text-amber-700" />
+                                  <span>تعديل</span>
+                                </button>
+
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -4170,6 +4719,303 @@ export default function App() {
                       className="px-5 py-2 text-xs font-black text-white bg-indigo-700 hover:bg-indigo-800 rounded-xl shadow-xs"
                     >
                       حفظ الإدارة
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ================= MODAL 3: EDIT EMPLOYEE / RECIPIENT ================= */}
+            {isEditRecipientModalOpen && editingRecipient && (
+              <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-slate-200">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
+                        <Pencil className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-black text-slate-900">
+                          تعديل بيانات الموظف والمستلم
+                        </h3>
+                        <p className="text-[11px] text-slate-500 font-medium">
+                          تحديث بيانات الموظف في دليل العاملين بمنطقة مياه دسوق
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditRecipientModalOpen(false);
+                        setEditingRecipient(null);
+                      }}
+                      className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        الاسم بالكامل (رباعي) *
+                      </label>
+                      <input
+                        type="text"
+                        value={editingRecipient.name}
+                        onChange={(e) => setEditingRecipient({ ...editingRecipient, name: e.target.value })}
+                        placeholder="مثال: حسام أحمد حسن بدوي"
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl font-bold focus:bg-white focus:outline-hidden focus:border-amber-600"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          الصفة الوظيفية
+                        </label>
+                        <input
+                          type="text"
+                          value={editingRecipient.jobTitle}
+                          onChange={(e) => setEditingRecipient({ ...editingRecipient, jobTitle: e.target.value })}
+                          placeholder="مثال: فني أول تشغيل"
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          الرقم الوظيفي (الكود)
+                        </label>
+                        <input
+                          type="text"
+                          value={editingRecipient.employeeCode}
+                          onChange={(e) =>
+                            setEditingRecipient({ ...editingRecipient, employeeCode: e.target.value })
+                          }
+                          placeholder="مثال: 10450"
+                          className="w-full px-3 py-2 text-xs font-mono-num bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        الإدارة التابعة ومقر العمل
+                      </label>
+                      <select
+                        value={editingRecipient.departmentName}
+                        onChange={(e) =>
+                          setEditingRecipient({ ...editingRecipient, departmentName: e.target.value })
+                        }
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl font-bold focus:bg-white focus:outline-hidden focus:border-amber-600"
+                      >
+                        <option value="">اختر الإدارة التابعة...</option>
+                        {db.departments.map((d) => (
+                          <option key={d.id} value={d.name}>
+                            {d.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          الرقم القومي (14 رقم)
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={14}
+                          value={editingRecipient.nationalId}
+                          onChange={(e) =>
+                            setEditingRecipient({ ...editingRecipient, nationalId: e.target.value })
+                          }
+                          placeholder="29001011500000"
+                          className="w-full px-3 py-2 text-xs font-mono-num bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          رقم الهاتف المحمول
+                        </label>
+                        <input
+                          type="text"
+                          value={editingRecipient.phone}
+                          onChange={(e) =>
+                            setEditingRecipient({ ...editingRecipient, phone: e.target.value })
+                          }
+                          placeholder="010XXXXXXXX"
+                          className="w-full px-3 py-2 text-xs font-mono-num bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Sync checkbox option */}
+                    <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 flex items-start gap-2.5">
+                      <input
+                        type="checkbox"
+                        id="updateEmpInReports"
+                        checked={updateEmployeeInPastReports}
+                        onChange={(e) => setUpdateEmployeeInPastReports(e.target.checked)}
+                        className="mt-0.5 rounded text-amber-600 focus:ring-amber-500"
+                      />
+                      <label htmlFor="updateEmpInReports" className="text-xs text-amber-950 font-medium cursor-pointer">
+                        <span className="font-bold block">مزامنة التعديلات مع سجل المحاضر السابقة</span>
+                        تحديث اسم الموظف وصفته تلقائياً في أي محاضر مسجلة باسمه في السجل والأرشيف
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditRecipientModalOpen(false);
+                        setEditingRecipient(null);
+                      }}
+                      className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                    >
+                      إلغاء
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveEditedRecipient}
+                      className="px-5 py-2 text-xs font-black text-white bg-amber-700 hover:bg-amber-800 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>حفظ التعديلات</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ================= MODAL 4: EDIT DEPARTMENT / STATION ================= */}
+            {isEditDepartmentModalOpen && editingDepartment && (
+              <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
+                        <Building2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-black text-slate-900">
+                          تعديل بيانات الإدارة أو المحطة
+                        </h3>
+                        <p className="text-[11px] text-slate-500 font-medium">
+                          تحديث بيانات الهيكل التنظيمي والمحطات التابعة
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditDepartmentModalOpen(false);
+                        setEditingDepartment(null);
+                      }}
+                      className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        اسم الإدارة أو المحطة *
+                      </label>
+                      <input
+                        type="text"
+                        value={editingDepartment.name}
+                        onChange={(e) =>
+                          setEditingDepartment({ ...editingDepartment, name: e.target.value })
+                        }
+                        placeholder="مثال: إدارة محطة مياه فوه الجديدة"
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl font-bold focus:bg-white focus:outline-hidden focus:border-amber-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        اسم مدير الإدارة / المشرف
+                      </label>
+                      <input
+                        type="text"
+                        value={editingDepartment.managerName}
+                        onChange={(e) =>
+                          setEditingDepartment({ ...editingDepartment, managerName: e.target.value })
+                        }
+                        placeholder="مثال: م. أحمد البدري"
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          كود الإدارة
+                        </label>
+                        <input
+                          type="text"
+                          value={editingDepartment.code}
+                          onChange={(e) =>
+                            setEditingDepartment({ ...editingDepartment, code: e.target.value })
+                          }
+                          placeholder="DSQ-11"
+                          className="w-full px-3 py-2 text-xs font-mono-num bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          مقر العمل / الموقع
+                        </label>
+                        <input
+                          type="text"
+                          value={editingDepartment.location}
+                          onChange={(e) =>
+                            setEditingDepartment({ ...editingDepartment, location: e.target.value })
+                          }
+                          placeholder="منطقة مياه دسوق"
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-amber-600"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Sync checkbox option */}
+                    <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 flex items-start gap-2.5">
+                      <input
+                        type="checkbox"
+                        id="updateDeptInLinked"
+                        checked={updateDepartmentInLinkedRecords}
+                        onChange={(e) => setUpdateDepartmentInLinkedRecords(e.target.checked)}
+                        className="mt-0.5 rounded text-amber-600 focus:ring-amber-500"
+                      />
+                      <label htmlFor="updateDeptInLinked" className="text-xs text-amber-950 font-medium cursor-pointer">
+                        <span className="font-bold block">مزامنة اسم الإدارة في الدليل والمحاضر</span>
+                        تحديث اسم الإدارة تلقائياً في سجلات الموظفين والمحاضر التابعة لها
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditDepartmentModalOpen(false);
+                        setEditingDepartment(null);
+                      }}
+                      className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                    >
+                      إلغاء
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveEditedDepartment}
+                      className="px-5 py-2 text-xs font-black text-white bg-amber-700 hover:bg-amber-800 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>حفظ التعديلات</span>
                     </button>
                   </div>
                 </div>
