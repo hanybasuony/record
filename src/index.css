@@ -34,6 +34,13 @@
     margin: 8mm;
   }
 
+  body.print-ledger-landscape {
+    @page {
+      size: A4 landscape;
+      margin: 6mm;
+    }
+  }
+
   body {
     background: #ffffff !important;
     color: #000000 !important;
@@ -60,6 +67,12 @@
   .official-a4-sheet {
     width: 100% !important;
     min-height: 278mm !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+
+  .official-archive-sheet {
+    width: 100% !important;
     box-shadow: none !important;
     margin: 0 !important;
   }

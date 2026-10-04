@@ -6,10 +6,11 @@ export interface ExportPdfOptions {
   elementId?: string;
   report?: CustodyReport;
   filename?: string;
+  orientation?: 'portrait' | 'landscape';
 }
 
 export async function exportReportToPdf(options: ExportPdfOptions = {}): Promise<boolean> {
-  const { elementId = 'official-receipt-sheet', report, filename } = options;
+  const { elementId = 'official-receipt-sheet', report, filename, orientation = 'portrait' } = options;
   const targetElement = document.getElementById(elementId);
 
   if (!targetElement) {
@@ -44,16 +45,16 @@ export async function exportReportToPdf(options: ExportPdfOptions = {}): Promise
 
     const imgData = canvas.toDataURL('image/jpeg', 0.98);
 
-    // Initialize A4 PDF: 210mm x 297mm
+    // Initialize A4 PDF: Portrait (210 x 297) or Landscape (297 x 210)
     const pdf = new jsPDF({
-      orientation: 'portrait',
+      orientation: orientation,
       unit: 'mm',
       format: 'a4',
       compress: true,
     });
 
-    const pdfWidth = 210;
-    const pdfHeight = 297;
+    const pdfWidth = orientation === 'landscape' ? 297 : 210;
+    const pdfHeight = orientation === 'landscape' ? 210 : 297;
 
     // Canvas aspect ratio
     const imgWidth = canvas.width;

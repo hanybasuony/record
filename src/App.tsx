@@ -52,6 +52,7 @@ import {
   getArabicDayName,
 } from './utils/arabicTafqeet';
 import { PrintableReceiptSheet } from './components/PrintableReceiptSheet';
+import { PrintableArchiveLedger } from './components/PrintableArchiveLedger';
 import { OfficialLogo } from './components/OfficialLogo';
 import { exportReportToPdf } from './utils/exportPdf';
 import { exportReportToDocx } from './utils/exportDocx';
@@ -225,6 +226,15 @@ export default function App() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterReportType, setFilterReportType] = useState<'all' | 'receipt' | 'transfer'>('all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  // Archive Ledger Printing & Preview states
+  const [isArchivePrintModalOpen, setIsArchivePrintModalOpen] = useState(false);
+  const [archivePrintOrientation, setArchivePrintOrientation] = useState<'landscape' | 'portrait'>('landscape');
+  const [archivePrintShowKpis, setArchivePrintShowKpis] = useState(true);
+  const [archivePrintShowItemDetails, setArchivePrintShowItemDetails] = useState(true);
+  const [archivePrintShowSignatures, setArchivePrintShowSignatures] = useState(true);
+  const [archivePrintFontSize, setArchivePrintFontSize] = useState<'small' | 'medium' | 'large'>('medium');
+  const [printTarget, setPrintTarget] = useState<'report' | 'archive'>('report');
 
   // Flexible Combobox dropdown visibility states
   const [showRecipientDropdown, setShowRecipientDropdown] = useState(false);
@@ -848,6 +858,113 @@ export default function App() {
     );
   }, [db, departmentSearchQuery]);
 
+  const archiveFilterDescription = useMemo(() => {
+    const parts: string[] = [];
+    if (filterReportType === 'receipt') parts.push('محاضر استلام عهدة');
+    else if (filterReportType === 'transfer') parts.push('أذون مناقيل عهدة');
+
+    if (filterRecipient !== 'all') parts.push(`المستلم: ${filterRecipient}`);
+    if (filterCommitteeMember !== 'all') parts.push(`اللجنة: ${filterCommitteeMember}`);
+    if (filterDepartment !== 'all') parts.push(`الإدارة: ${filterDepartment}`);
+    if (filterStatus !== 'all') parts.push(`الحالة: ${filterStatus}`);
+    if (archiveSearch.trim()) parts.push(`بحث: "${archiveSearch.trim()}"`);
+
+    return parts.length > 0 ? parts.join(' • ') : 'كافة المحاضر والأذون المقيدة بالسجل العام';
+  }, [filterReportType, filterRecipient, filterCommitteeMember, filterDepartment, filterStatus, archiveSearch]);
+
+  const archiveDateRangeDescription = useMemo(() => {
+    if (filterDateFrom && filterDateTo) return `من ${filterDateFrom} إلى ${filterDateTo}`;
+    if (filterDateFrom) return `من تاريخ ${filterDateFrom}`;
+    if (filterDateTo) return `حتى تاريخ ${filterDateTo}`;
+    return undefined;
+  }, [filterDateFrom, filterDateTo]);
+
+  const handlePrintArchiveLedger = () => {
+    setPrintTarget('archive');
+    if (archivePrintOrientation === 'landscape') {
+      document.body.classList.add('print-ledger-landscape');
+    } else {
+      document.body.classList.remove('print-ledger-landscape');
+    }
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        document.body.classList.remove('print-ledger-landscape');
+      }, 800);
+    }, 150);
+  };
+
+  const handleExportArchiveLedgerPdf = async () => {
+    setIsExportingPdf(true);
+    showToast('جاري تجهيز وتصدير سجل المحاضر والأرشيف إلى PDF...');
+    try {
+      const success = await exportReportToPdf({
+        elementId: 'official-archive-ledger-sheet-modal',
+        filename: `سجل_قيد_محاضر_العهد_${new Date().toISOString().slice(0, 10)}.pdf`,
+        orientation: archivePrintOrientation,
+      });
+      if (success) {
+        showToast('تم تصدير سجل المحاضر والأرشيف إلى ملف PDF بنجاح');
+      } else {
+        showToast('حدث خطأ أثناء تصدير ملف PDF للسجل');
+      }
+    } catch {
+      showToast('تعذر تصدير سجل المحاضر إلى PDF');
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  const handleExportArchiveLedgerCsv = () => {
+    if (filteredArchiveReports.length === 0) {
+      showToast('لا توجد بيانات لتصديرها');
+      return;
+    }
+    const headers = [
+      'مسلسل',
+      'رقم المحضر',
+      'تاريخ الانعقاد',
+      'اليوم',
+      'نوع المستند',
+      'الطرف المستلم',
+      'الصفة الوظيفية للمستلم',
+      'كود الموظف',
+      'الإدارة / المحطة',
+      'الطرف المسلّم',
+      'إدارة المسلّم',
+      'بيان الأصناف والكميات',
+      'عدد الأصناف',
+      'أعضاء لجنة الفحص والاستلام',
+      'حالة الاعتماد'
+    ];
+    const rows = filteredArchiveReports.map((rep, idx) => [
+      idx + 1,
+      `"${rep.reportNumber}"`,
+      `"${rep.meetingDate}"`,
+      `"${rep.dayName}"`,
+      `"${rep.reportType === 'transfer' ? 'إذن مناقيل عهدة' : 'محضر استلام عهدة'}"`,
+      `"${rep.recipientName || ''}"`,
+      `"${rep.recipientJobTitle || ''}"`,
+      `"${rep.recipientEmployeeCode || ''}"`,
+      `"${rep.departmentName || ''}"`,
+      `"${rep.delivererName || ''}"`,
+      `"${rep.delivererDepartmentName || ''}"`,
+      `"${rep.items.map((i) => `${i.itemName} (${i.quantity} ${i.unit})`).join(' | ')}"`,
+      rep.items.length,
+      `"${rep.committeeMembers.map((m) => `${m.name} (${m.committeeRole})`).join(' | ')}"`,
+      `"${rep.status}"`
+    ]);
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `سجل_قيد_محاضر_العهد_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast('تم تصدير كشف سجل المحاضر والأرشيف (Excel/CSV) بنجاح');
+  };
+
   const handleExportDatabase = () => {
     if (!db) return;
     const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
@@ -946,14 +1063,21 @@ export default function App() {
             <button
               type="button"
               onClick={() => {
-                handleSaveReport();
-                setTimeout(() => window.print(), 150);
+                if (activeTab === 'archive') {
+                  setIsArchivePrintModalOpen(true);
+                } else {
+                  setPrintTarget('report');
+                  handleSaveReport();
+                  setTimeout(() => window.print(), 150);
+                }
               }}
               className="px-3 py-1.5 text-xs font-bold text-white bg-white/10 hover:bg-white/20 active:bg-white/30 rounded-xl transition-colors flex items-center gap-1.5 border border-white/20 shadow-xs whitespace-nowrap"
-              title="طباعة الورقة الرسمية A4 مباشرة"
+              title={activeTab === 'archive' ? 'معاينة وطباعة سجل المحاضر والأرشيف A4' : 'طباعة الورقة الرسمية A4 مباشرة'}
             >
               <Printer className="w-3.5 h-3.5 text-sky-300" />
-              <span className="hidden md:inline">طباعة A4</span>
+              <span className="hidden md:inline">
+                {activeTab === 'archive' ? 'طباعة السجل A4' : 'طباعة A4'}
+              </span>
               <span className="md:hidden">طباعة</span>
             </button>
 
@@ -2694,6 +2818,19 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setIsArchivePrintModalOpen(true)}
+                    className="px-3.5 py-1.5 text-xs font-black text-white bg-[#16324f] hover:bg-[#0f243a] border border-[#0d1e30] rounded-lg flex items-center gap-2 shadow-xs transition-all"
+                    title="معاينة وطباعة سجل المحاضر والأرشيف A4"
+                  >
+                    <Printer className="w-4 h-4 text-amber-300" />
+                    <span>طباعة السجل الرسمي (A4)</span>
+                    <span className="bg-white/20 text-white text-[10px] font-mono-num px-1.5 py-0.2 rounded-full font-bold">
+                      {filteredArchiveReports.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setShowAdvancedFilters((v) => !v)}
                     className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-colors flex items-center gap-1.5 ${
                       showAdvancedFilters
@@ -2909,17 +3046,40 @@ export default function App() {
                 </div>
               )}
 
-              {/* Filter Results Counter */}
-              <div className="flex items-center justify-between text-xs text-slate-600 font-semibold px-1">
-                <span>
-                  عرض <strong className="text-slate-900 font-mono-num">{filteredArchiveReports.length}</strong> محضر من إجمالي{' '}
-                  <strong className="text-slate-900 font-mono-num">{db.reports.length}</strong> محضر مسجل
-                </span>
-                {hasActiveFilters && (
-                  <span className="text-sky-700 font-bold">
-                    تم تطبيق شروط التصفية المحددة
+              {/* Filter Results Counter & Ledger Print Toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600 font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <span>
+                    عرض <strong className="text-slate-900 font-mono-num">{filteredArchiveReports.length}</strong> محضر من إجمالي{' '}
+                    <strong className="text-slate-900 font-mono-num">{db.reports.length}</strong> محضر مسجل
                   </span>
-                )}
+                  {hasActiveFilters && (
+                    <span className="text-sky-800 font-bold bg-sky-100 px-2 py-0.5 rounded text-[11px] border border-sky-200">
+                      تصفية نشطة ({archiveFilterDescription})
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsArchivePrintModalOpen(true)}
+                    className="px-3 py-1.5 bg-white hover:bg-slate-100 text-[#16324f] font-bold text-xs border border-slate-300 rounded-md shadow-2xs flex items-center gap-1.5 transition-colors"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-sky-700" />
+                    <span>معاينة وطباعة السجل المصفى (A4)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportArchiveLedgerCsv}
+                    className="px-3 py-1.5 bg-white hover:bg-slate-100 text-emerald-800 font-bold text-xs border border-slate-300 rounded-md shadow-2xs flex items-center gap-1.5 transition-colors"
+                    title="تصدير كشف جدول إكسل (CSV)"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>تصدير Excel/CSV</span>
+                  </button>
+                </div>
               </div>
 
               {/* Reports Table with Multi-Format Export Buttons */}
@@ -4569,14 +4729,262 @@ export default function App() {
 
       {/* Hidden container for print */}
       <div className="hidden print:block print-only-container">
-        <PrintableReceiptSheet
-          sheetId="official-receipt-sheet-print"
-          report={activeReport}
-          settings={activeDb.settings}
-          showReportNumberBadge={true}
-          fontSizeScale={printFontSize}
-        />
+        {printTarget === 'archive' ? (
+          <PrintableArchiveLedger
+            sheetId="official-archive-ledger-sheet-print"
+            reports={filteredArchiveReports}
+            settings={activeDb.settings}
+            filterDescription={archiveFilterDescription}
+            dateRangeDescription={archiveDateRangeDescription}
+            showKpiSummary={archivePrintShowKpis}
+            showItemDetails={archivePrintShowItemDetails}
+            showSignatures={archivePrintShowSignatures}
+            orientation={archivePrintOrientation}
+            printFontSize={archivePrintFontSize}
+          />
+        ) : (
+          <PrintableReceiptSheet
+            sheetId="official-receipt-sheet-print"
+            report={activeReport}
+            settings={activeDb.settings}
+            showReportNumberBadge={true}
+            fontSizeScale={printFontSize}
+          />
+        )}
       </div>
+
+      {/* ================= ARCHIVE PRINT & PREVIEW MODAL ================= */}
+      {isArchivePrintModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto no-print">
+          <div className="bg-white rounded-2xl w-full max-w-7xl max-h-[96vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Executive Header */}
+            <div className="bg-[#16324f] text-white px-5 py-3.5 flex items-center justify-between gap-4 border-b border-sky-950 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
+                  <Printer className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base sm:text-lg font-black tracking-wide">
+                      معاينة وطباعة سجل وأرشيف المحاضر والأذون (A4 Ledger)
+                    </h2>
+                    <span className="bg-sky-500/30 text-sky-200 border border-sky-400/40 text-[11px] font-bold px-2 py-0.5 rounded-full font-mono-num">
+                      {filteredArchiveReports.length} محضر محدد
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-sky-200/80 font-medium">
+                    طباعة رسمية معتمدة لسجل قيد العهد والمناقيل مطابقة لمعايير شركة مياه الشرب والصرف الصحي بكفر الشيخ
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Direct Print Button */}
+                <button
+                  type="button"
+                  onClick={handlePrintArchiveLedger}
+                  className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-md flex items-center gap-2 transition-all active:scale-95"
+                  title="إرسال السجل للطابعة أو حفظ كـ PDF عبر المتصفح"
+                >
+                  <Printer className="w-4 h-4 text-slate-950" />
+                  <span>طباعة السجل الآن</span>
+                </button>
+
+                {/* Export PDF Button */}
+                <button
+                  type="button"
+                  disabled={isExportingPdf}
+                  onClick={handleExportArchiveLedgerPdf}
+                  className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-all disabled:opacity-50"
+                  title="تنزيل ملف PDF عالي الجودة للسجل"
+                >
+                  {isExportingPdf ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <FileDown className="w-4 h-4" />
+                  )}
+                  <span>تصدير PDF</span>
+                </button>
+
+                {/* Export Excel/CSV Button */}
+                <button
+                  type="button"
+                  onClick={handleExportArchiveLedgerCsv}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-all"
+                  title="تصدير جدول السجل إلى Excel / CSV"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Excel / CSV</span>
+                </button>
+
+                {/* Close Modal */}
+                <button
+                  type="button"
+                  onClick={() => setIsArchivePrintModalOpen(false)}
+                  className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors mr-1"
+                  title="إغلاق المعاينة"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Control & Customization Toolbar */}
+            <div className="bg-slate-50 border-b border-slate-200 px-5 py-2.5 flex flex-wrap items-center justify-between gap-4 text-xs shrink-0">
+              {/* Left Side: Layout & Toggles */}
+              <div className="flex flex-wrap items-center gap-4">
+                {/* Orientation Selector */}
+                <div className="flex items-center gap-1 bg-white border border-slate-300 p-1 rounded-lg">
+                  <span className="text-[11px] font-bold text-slate-600 px-1">الاتجاه:</span>
+                  <button
+                    type="button"
+                    onClick={() => setArchivePrintOrientation('landscape')}
+                    className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
+                      archivePrintOrientation === 'landscape'
+                        ? 'bg-[#16324f] text-white shadow-2xs'
+                        : 'text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    أفقي A4 (مستحسن للسجلات)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setArchivePrintOrientation('portrait')}
+                    className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
+                      archivePrintOrientation === 'portrait'
+                        ? 'bg-[#16324f] text-white shadow-2xs'
+                        : 'text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    رأسي A4
+                  </button>
+                </div>
+
+                {/* Font Size Selector */}
+                <div className="flex items-center gap-1 bg-white border border-slate-300 p-1 rounded-lg">
+                  <span className="text-[11px] font-bold text-slate-600 px-1">حجم الخط:</span>
+                  <button
+                    type="button"
+                    onClick={() => setArchivePrintFontSize('small')}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                      archivePrintFontSize === 'small'
+                        ? 'bg-sky-700 text-white'
+                        : 'text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    مضغوط
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setArchivePrintFontSize('medium')}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                      archivePrintFontSize === 'medium'
+                        ? 'bg-sky-700 text-white'
+                        : 'text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    متوسط
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setArchivePrintFontSize('large')}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                      archivePrintFontSize === 'large'
+                        ? 'bg-sky-700 text-white'
+                        : 'text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    كبير
+                  </button>
+                </div>
+
+                {/* Checkbox Toggles */}
+                <label className="flex items-center gap-1.5 cursor-pointer font-semibold text-slate-700 select-none">
+                  <input
+                    type="checkbox"
+                    checked={archivePrintShowKpis}
+                    onChange={(e) => setArchivePrintShowKpis(e.target.checked)}
+                    className="rounded border-slate-300 text-sky-700"
+                  />
+                  <span>شريط الإحصائيات (KPIs)</span>
+                </label>
+
+                <label className="flex items-center gap-1.5 cursor-pointer font-semibold text-slate-700 select-none">
+                  <input
+                    type="checkbox"
+                    checked={archivePrintShowItemDetails}
+                    onChange={(e) => setArchivePrintShowItemDetails(e.target.checked)}
+                    className="rounded border-slate-300 text-sky-700"
+                  />
+                  <span>تفاصيل وحصر الأصناف</span>
+                </label>
+
+                <label className="flex items-center gap-1.5 cursor-pointer font-semibold text-slate-700 select-none">
+                  <input
+                    type="checkbox"
+                    checked={archivePrintShowSignatures}
+                    onChange={(e) => setArchivePrintShowSignatures(e.target.checked)}
+                    className="rounded border-slate-300 text-sky-700"
+                  />
+                  <span>توقيعات الاعتماد والخاتم</span>
+                </label>
+              </div>
+
+              {/* Right Side: Active Filter Badge */}
+              <div className="text-[11px] text-slate-500 font-medium truncate max-w-sm">
+                <span className="text-slate-700 font-bold">النطاق: </span>
+                {archiveFilterDescription}
+              </div>
+            </div>
+
+            {/* Live Preview Scrollable Area */}
+            <div className="flex-1 bg-slate-300/80 p-3 sm:p-6 overflow-auto flex items-start justify-center">
+              <div className="shadow-2xl transition-all">
+                <PrintableArchiveLedger
+                  sheetId="official-archive-ledger-sheet-modal"
+                  reports={filteredArchiveReports}
+                  settings={activeDb.settings}
+                  filterDescription={archiveFilterDescription}
+                  dateRangeDescription={archiveDateRangeDescription}
+                  showKpiSummary={archivePrintShowKpis}
+                  showItemDetails={archivePrintShowItemDetails}
+                  showSignatures={archivePrintShowSignatures}
+                  orientation={archivePrintOrientation}
+                  printFontSize={archivePrintFontSize}
+                />
+              </div>
+            </div>
+
+            {/* Modal Bottom Footer Bar */}
+            <div className="bg-white border-t border-slate-200 px-5 py-2.5 flex items-center justify-between text-xs text-slate-600 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                <span>
+                  جاهز للطباعة والتصدير • {filteredArchiveReports.length} محضر مدرج بالسجل الحالي
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsArchivePrintModalOpen(false)}
+                  className="px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-lg border border-slate-300 transition-colors"
+                >
+                  إغلاق
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintArchiveLedger}
+                  className="px-5 py-1.5 text-xs font-bold text-white bg-[#16324f] hover:bg-[#0f243a] rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
+                >
+                  <Printer className="w-3.5 h-3.5 text-amber-300" />
+                  <span>طباعة A4</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
