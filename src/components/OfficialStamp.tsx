@@ -8,7 +8,7 @@ interface OfficialStampProps {
   className?: string;
 }
 
-export const OfficialStamp: React.FC<OfficialStampProps> = ({
+export const OfficialStamp: React.FC<OfficialStampProps> = React.memo(({
   companyName = 'شركة مياه الشرب والصرف الصحي بكفر الشيخ',
   areaName = 'منطقة مياه دسوق',
   departmentName = 'إدارة المخازن والعهد',
@@ -96,4 +96,4 @@ export const OfficialStamp: React.FC<OfficialStampProps> = ({
       </svg>
     </div>
   );
-};
+});

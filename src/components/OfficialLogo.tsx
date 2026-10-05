@@ -9,7 +9,7 @@ interface OfficialLogoProps {
   useVectorOnly?: boolean;
 }
 
-export const OfficialLogo: React.FC<OfficialLogoProps> = ({
+export const OfficialLogo: React.FC<OfficialLogoProps> = React.memo(({
   className = 'w-24 h-24 aspect-square',
   showText = true,
   customLogoUrl,
@@ -248,4 +248,4 @@ export const OfficialLogo: React.FC<OfficialLogoProps> = ({
       </svg>
     </div>
   );
-};
+});

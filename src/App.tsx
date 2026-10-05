@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import {
   Printer,
   Save,
@@ -38,6 +38,7 @@ import {
   Edit,
   Edit3,
   Sparkles,
+  Award,
   Image as ImageIcon,
 } from 'lucide-react';
 import {
@@ -58,7 +59,7 @@ import {
 import { PrintableReceiptSheet } from './components/PrintableReceiptSheet';
 import { PrintableArchiveLedger } from './components/PrintableArchiveLedger';
 import { OfficialLogo } from './components/OfficialLogo';
-import { CommitteeMemberCombobox } from './components/CommitteeMemberCombobox';
+import { CommitteeMemberCombobox, OFFICIAL_DEFAULT_MEMBERS } from './components/CommitteeMemberCombobox';
 import { exportReportToPdf } from './utils/exportPdf';
 import { exportReportToDocx } from './utils/exportDocx';
 import { DEFAULT_DATABASE } from './data/defaultDatabase';
@@ -326,6 +327,19 @@ export default function App() {
   // Edit Catalog Item states
   const [editingCatalogItem, setEditingCatalogItem] = useState<CatalogItemRecord | null>(null);
   const [isEditCatalogItemModalOpen, setIsEditCatalogItemModalOpen] = useState(false);
+
+  // Committee Formations & Presets management states
+  const [committeesActiveView, setCommitteesActiveView] = useState<'presets' | 'members' | 'catalog'>('presets');
+  const [isAddingNewPreset, setIsAddingNewPreset] = useState(false);
+  const [newPresetForm, setNewPresetForm] = useState<{
+    name: string;
+    description: string;
+    selectedMemberIds: string[];
+  }>({
+    name: '',
+    description: '',
+    selectedMemberIds: [],
+  });
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -657,14 +671,15 @@ export default function App() {
     prefill?: {
       recipient?: RecipientRecord;
       deliverer?: RecipientRecord;
-    }
+    },
+    preset?: CommitteePreset
   ) => {
     if (!db) return;
     const nextSeq = 101 + db.reports.length;
     const nextNumber = `2026/${nextSeq}`;
     const fresh = createEmptyReport(
       nextNumber,
-      db.committeePresets[0],
+      preset || db.committeePresets[0],
       reportType === 'transfer' ? 'إذن مناقلة عهدة' : db.settings.defaultReportTitle,
       db.settings.defaultApproverTitle,
       db.settings.defaultApproverName,
@@ -692,6 +707,91 @@ export default function App() {
         : `تم إنشاء نموذج محضر استلام جديد رقم (${nextNumber})`
     );
   };
+
+  const handleApplyPresetToCurrentReport = (preset: CommitteePreset) => {
+    if (!currentReport) return;
+    setCurrentReport({
+      ...currentReport,
+      committeeMembers: preset.members.map((m, idx) => ({
+        ...m,
+        id: `cm-preset-${Date.now()}-${idx}`,
+      })),
+    });
+    setActiveTab('editor');
+    showToast(`تم ربط وتطبيق تشكيل "${preset.presetName}" على المحضر المفتوح`);
+  };
+
+  const handleCreateReportWithPreset = (preset: CommitteePreset) => {
+    handleCreateNewReport('receipt', undefined, preset);
+  };
+
+  const handleDeleteCommitteePreset = async (presetId: string) => {
+    const target = db.committeePresets.find((p) => p.id === presetId);
+    if (!target) return;
+    const updated = db.committeePresets.filter((p) => p.id !== presetId);
+    await syncDatabase(
+      { ...db, committeePresets: updated },
+      `تم حذف تشكيل اللجنة "${target.presetName}"`
+    );
+  };
+
+  const handleAddNewPresetFromForm = async () => {
+    if (!newPresetForm.name.trim() || newPresetForm.selectedMemberIds.length === 0) {
+      showToast('يرجى كتابة اسم التشكيل واختيار عضو واحد على الأقل من الدليل');
+      return;
+    }
+    const chosenMembers: CommitteeMemberEntry[] = newPresetForm.selectedMemberIds
+      .map((id, idx) => {
+        const found = db.committeeMembers.find((cm) => cm.id === id);
+        if (!found) return null;
+        return {
+          id: `pm-${Date.now()}-${idx}`,
+          prefix: found.prefix || 'السيد الأستاذ /',
+          name: found.name,
+          jobTitle: found.jobTitle,
+          committeeRole: idx === 0 ? 'رئيسا' : (found.defaultCommitteeRole || 'عضوا'),
+          department: found.departmentName,
+        };
+      })
+      .filter(Boolean) as CommitteeMemberEntry[];
+
+    const newPreset: CommitteePreset = {
+      id: `preset-${Date.now()}`,
+      presetName: newPresetForm.name.trim(),
+      description: newPresetForm.description.trim() || `تشكيل لجنة مكون من ${chosenMembers.length} أعضاء`,
+      members: chosenMembers,
+    };
+
+    await syncDatabase(
+      { ...db, committeePresets: [newPreset, ...db.committeePresets] },
+      `تم حفظ تشكيل اللجنة "${newPreset.presetName}" في قاعدة البيانات`
+    );
+    setNewPresetForm({ name: '', description: '', selectedMemberIds: [] });
+    setIsAddingNewPreset(false);
+  };
+
+  const isOfficialDefaultCommitteeActive = useMemo(() => {
+    if (!currentReport || currentReport.committeeMembers.length !== 3) return false;
+    const cms = currentReport.committeeMembers;
+    return (
+      cms[0]?.name?.trim() === 'علي عبداللطيف غزال' &&
+      cms[1]?.name?.trim() === 'محمد مسعود ابوسمرة' &&
+      cms[2]?.name?.trim() === 'محمود عبداللطيف زينهم'
+    );
+  }, [currentReport?.committeeMembers]);
+
+  const activePresetId = useMemo(() => {
+    if (!currentReport) return 'custom';
+    if (isOfficialDefaultCommitteeActive) return 'official-default';
+    const matched = db?.committeePresets?.find(
+      (p) =>
+        p.members.length === currentReport.committeeMembers.length &&
+        p.members.every(
+          (pm, i) => currentReport.committeeMembers[i]?.name?.trim() === pm.name?.trim()
+        )
+    );
+    return matched ? matched.id : 'custom';
+  }, [currentReport?.committeeMembers, isOfficialDefaultCommitteeActive, db?.committeePresets]);
 
   const handleDuplicateReport = (rep: CustodyReport) => {
     if (!db) return;
@@ -752,7 +852,31 @@ export default function App() {
   ) => {
     if (!currentReport) return;
     const updated = [...currentReport.committeeMembers];
-    updated[index] = { ...updated[index], [field]: value };
+    const prev = updated[index] || {};
+    let newJobTitle = prev.jobTitle;
+    let newPrefix = prev.prefix;
+    let newDepartment = prev.department;
+
+    if (field === 'name') {
+      const match =
+        db?.committeeMembers?.find((m) => m.name?.trim() === value.trim()) ||
+        OFFICIAL_DEFAULT_MEMBERS.find((m) => m.name?.trim() === value.trim());
+      if (match) {
+        newJobTitle = match.jobTitle || newJobTitle;
+        newPrefix = match.prefix || newPrefix;
+        newDepartment = match.departmentName || newDepartment;
+      }
+    }
+
+    updated[index] = {
+      ...prev,
+      [field]: value,
+      ...(field === 'name' && {
+        jobTitle: newJobTitle,
+        prefix: newPrefix,
+        department: newDepartment,
+      }),
+    };
     setCurrentReport({ ...currentReport, committeeMembers: updated });
   };
 
@@ -1325,6 +1449,14 @@ export default function App() {
 
   const activeDb = db || DEFAULT_DATABASE;
   const activeReport = currentReport || activeDb.reports[0] || createEmptyReport('2026/101');
+  const [debouncedReport, setDebouncedReport] = useState<CustodyReport>(activeReport);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedReport(activeReport);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [activeReport]);
 
   return (
     <div dir="rtl" className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
@@ -1437,47 +1569,80 @@ export default function App() {
           </div>
         </div>
 
-        {/* Tier 2: Dedicated Unified Navigation Tab Bar */}
-        <div className="bg-white border-b border-slate-200/90 px-3 lg:px-8 shadow-xs">
-          <div className="overflow-x-auto no-scrollbar py-1">
-            <nav className="flex items-center gap-1.5 sm:gap-2 min-w-max">
+        {/* Tier 2: Dedicated Unified Navigation Tab Bar (Ultra-Professional Executive Design) */}
+        <div className="bg-white/95 backdrop-blur-md border-b border-slate-200/90 px-3 lg:px-8 py-2 shadow-2xs">
+          <div className="flex items-center justify-between gap-3 overflow-x-auto no-scrollbar">
+            {/* Nav Tabs Segmented Track */}
+            <nav className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-2xl border border-slate-200/80 shadow-inner min-w-max">
               {[
                 {
                   id: 'editor',
                   label: 'محرر النماذج والمحاضر',
                   icon: FileText,
-                  badge: currentReport?.reportType === 'transfer' ? 'مناقيل' : 'استلام',
-                  badgeNumber: currentReport?.reportNumber,
-                  badgeColor:
-                    currentReport?.reportType === 'transfer'
-                      ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                      : 'bg-sky-100 text-sky-900 border-sky-300',
+                  activeColor: 'text-sky-700 bg-sky-50',
+                  badgeElement: (
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black border shadow-2xs transition-all ${
+                        currentReport?.reportType === 'transfer'
+                          ? 'bg-emerald-50 text-emerald-950 border-emerald-300'
+                          : 'bg-sky-50 text-sky-950 border-sky-300'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                          currentReport?.reportType === 'transfer' ? 'bg-emerald-500' : 'bg-sky-500'
+                        }`}
+                      ></span>
+                      <span>{currentReport?.reportType === 'transfer' ? 'مناقيل' : 'استلام'}</span>
+                      <span className="font-mono-num font-extrabold text-[#081c30]">
+                        #{currentReport?.reportNumber || '101'}
+                      </span>
+                    </span>
+                  ),
                 },
                 {
                   id: 'archive',
                   label: 'سجل وأرشيف المحاضر',
                   icon: Search,
-                  badge: `${db.reports.length} محضر`,
-                  badgeColor: 'bg-slate-100 text-slate-800 border-slate-200',
+                  activeColor: 'text-indigo-700 bg-indigo-50',
+                  badgeElement: (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold font-mono-num border bg-slate-50 text-slate-800 border-slate-200 shadow-2xs">
+                      {db.reports.length} محضر
+                    </span>
+                  ),
                 },
                 {
                   id: 'recipients',
                   label: 'دليل المستلمين والموظفين',
                   icon: Users,
-                  badge: `${db.recipients.length} موظفاً`,
-                  badgeColor: 'bg-sky-100 text-sky-900 border-sky-200 font-bold',
+                  activeColor: 'text-emerald-700 bg-emerald-50',
+                  badgeElement: (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold font-mono-num border bg-emerald-50 text-emerald-900 border-emerald-200 shadow-2xs">
+                      {db.recipients.length} موظفاً
+                    </span>
+                  ),
                 },
                 {
                   id: 'committees',
-                  label: 'تشكيل اللجان وقائمة الأصناف',
-                  icon: Package,
-                  badge: `${db.catalogItems?.length || 0} صنف`,
-                  badgeColor: 'bg-slate-100 text-slate-800 border-slate-200',
+                  label: 'تشكيلات وقوالب اللجان',
+                  icon: UserCheck,
+                  activeColor: 'text-amber-700 bg-amber-50',
+                  badgeElement: (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold font-mono-num border bg-amber-50 text-amber-950 border-amber-200 shadow-2xs">
+                      {db.committeePresets.length + 1} تشكيلات
+                    </span>
+                  ),
                 },
                 {
                   id: 'settings',
                   label: 'إعدادات المنظومة والترويسة',
                   icon: Settings,
+                  activeColor: 'text-slate-800 bg-slate-100',
+                  badgeElement: (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-slate-100 text-slate-600 border-slate-200 shadow-2xs hidden sm:inline">
+                      الترويسة والطباعة
+                    </span>
+                  ),
                 },
               ].map((tab) => {
                 const Icon = tab.icon;
@@ -1487,36 +1652,42 @@ export default function App() {
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                    className={`relative px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap select-none ${
+                    className={`relative group px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap select-none ${
                       isActive
-                        ? 'bg-[#0b2742] text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-950 hover:bg-slate-100/80'
+                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200/90 ring-1 ring-sky-900/5 font-black'
+                        : 'text-slate-600 hover:text-slate-950 hover:bg-white/70'
                     }`}
                   >
-                    <Icon
-                      className={`w-4 h-4 transition-colors ${
-                        isActive ? 'text-sky-300' : 'text-slate-500'
+                    <span
+                      className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${
+                        isActive ? tab.activeColor : 'text-slate-400 group-hover:text-slate-700 bg-slate-200/40'
                       }`}
-                    />
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                    </span>
                     <span>{tab.label}</span>
-                    {tab.badge && (
-                      <span
-                        className={`text-[11px] font-mono-num font-extrabold px-2 py-0.5 rounded-full border transition-colors ${
-                          isActive
-                            ? 'bg-white/20 text-white border-white/30'
-                            : tab.badgeColor
-                        }`}
-                      >
-                        {tab.badge}
-                      </span>
-                    )}
+                    {tab.badgeElement}
                     {isActive && (
-                      <span className="absolute -bottom-1 left-4 right-4 h-0.5 bg-sky-400 rounded-full"></span>
+                      <span className="absolute -bottom-1 left-4 right-4 h-0.5 bg-gradient-to-r from-sky-600 to-indigo-600 rounded-full shadow-xs"></span>
                     )}
                   </button>
                 );
               })}
             </nav>
+
+            {/* Left Executive System Status Accessory */}
+            <div className="hidden xl:flex items-center gap-2 text-xs font-bold shrink-0">
+              <div className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-1.5 text-slate-700 shadow-2xs">
+                <Calendar className="w-3.5 h-3.5 text-sky-700" />
+                <span>
+                  {getArabicDayName(currentReport.meetingDate)} {currentReport.meetingDate}
+                </span>
+              </div>
+              <div className="px-3 py-1.5 rounded-xl bg-emerald-50/80 border border-emerald-200 flex items-center gap-1.5 text-emerald-900 shadow-2xs">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="font-extrabold text-[11px]">قاعدة البيانات متزامنة</span>
+              </div>
+            </div>
           </div>
         </div>
       </header>
@@ -1791,27 +1962,40 @@ export default function App() {
                 {/* Section 2: Parties Input (Transfer or Single Recipient) */}
                 <section className="space-y-4 pt-2">
                   <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
-                    <h2 className="text-base font-bold text-slate-900">
-                      {currentReport.reportType === 'transfer'
-                        ? '02. أطراف محضر إذن المناقيل (الطرف المُسلِّم والطرف المُستلِم)'
-                        : '02. بيانات المستلم والإدارة التابعة (إدخال مرن أو من الدليل)'}
+                    <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      <Users className="w-5 h-5 text-sky-800" />
+                      <span>
+                        {currentReport.reportType === 'transfer'
+                          ? '02. أطراف محضر إذن المناقلة (المُسلِّم والمُستلِم)'
+                          : '02. بيانات المستلم والإدارة التابعة'}
+                      </span>
                     </h2>
-                    <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={autoSaveToDirectory}
-                        onChange={(e) => setAutoSaveToDirectory(e.target.checked)}
-                        className="rounded border-slate-300 text-sky-700 focus:ring-sky-600"
-                      />
-                      <span>حفظ الأسماء والإدارات الجديدة تلقائياً بالدليل</span>
-                    </label>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('recipients')}
+                        className="text-xs font-bold text-sky-700 hover:text-sky-900 hover:underline flex items-center gap-1"
+                      >
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span>دليل العاملين ({db.recipients.length}) ↗</span>
+                      </button>
+                      <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={autoSaveToDirectory}
+                          onChange={(e) => setAutoSaveToDirectory(e.target.checked)}
+                          className="rounded border-slate-300 text-sky-700 focus:ring-sky-600"
+                        />
+                        <span>حفظ الجديد تلقائياً</span>
+                      </label>
+                    </div>
                   </div>
 
                   {currentReport.reportType === 'transfer' ? (
                     <div className="space-y-4">
-                      {/* Reason for Transfer with Quick Suggestions */}
-                      <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3.5 space-y-2">
-                        <label className="block text-xs font-extrabold text-[#0a2540]">
+                      {/* Reason for Transfer */}
+                      <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3 space-y-2">
+                        <label className="block text-xs font-bold text-[#0a2540]">
                           سبب إجراء المناقلة الرسمية للعهدة والمهمات:
                         </label>
                         <input
@@ -1821,16 +2005,15 @@ export default function App() {
                             setCurrentReport({ ...currentReport, transferReason: e.target.value })
                           }
                           placeholder="مثال: إعادة توزيع عهدة ومهمات تشغيلية / نقل موظف / صيانة محطة..."
-                          className="w-full px-3 py-2 text-sm font-semibold bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-700"
+                          className="w-full h-10 px-3 text-xs sm:text-sm font-semibold bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-600"
                         />
-                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                          <span className="text-[11px] font-bold text-slate-600">اقتراحات سريعة:</span>
+                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                          <span className="text-[11px] font-bold text-slate-500">اقتراحات:</span>
                           {[
                             'إعادة توزيع عهدة ومهمات تشغيلية',
                             'نقل موظف لقسم أو موقع آخر',
                             'صيانة وتشغيل محطة/شبكة',
                             'استبدال عهدة متهالكة بجديدة',
-                            'إخلاء طرف وتسليم للبديل',
                           ].map((reason) => (
                             <button
                               key={reason}
@@ -1838,7 +2021,7 @@ export default function App() {
                               onClick={() =>
                                 setCurrentReport({ ...currentReport, transferReason: reason })
                               }
-                              className="px-2 py-0.5 rounded text-[10.5px] font-semibold bg-white hover:bg-sky-100 text-sky-800 border border-sky-200 transition-colors"
+                              className="px-2 py-0.5 rounded text-[11px] font-medium bg-white hover:bg-sky-100 text-sky-800 border border-sky-200 transition-colors"
                             >
                               {reason}
                             </button>
@@ -1846,89 +2029,52 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Deliverer & Recipient Cards Container */}
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
+                      {/* Deliverer & Recipient Side by Side */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* 1. Deliverer Card (المُسلِّم) */}
-                        <div className="lg:col-span-6 bg-rose-50/40 border-2 border-rose-200 rounded-xl p-4 space-y-3">
-                          <div className="flex items-center justify-between pb-2 border-b border-rose-200">
-                            <span className="flex items-center gap-1.5 font-extrabold text-xs text-rose-900">
-                              <span className="w-2.5 h-2.5 rounded-full bg-rose-600 inline-block"></span>
+                        <div className="bg-rose-50/40 border border-rose-200 rounded-xl p-3.5 space-y-3">
+                          <div className="flex items-center justify-between pb-1.5 border-b border-rose-200/80">
+                            <span className="flex items-center gap-1.5 font-bold text-xs text-rose-900">
+                              <span className="w-2 h-2 rounded-full bg-rose-600 inline-block"></span>
                               <span>الطرف الأول: المُسَلِّم (المتنازل عن العهدة)</span>
                             </span>
-                            <span className="text-[10.5px] text-rose-700 font-bold bg-rose-100 px-2 py-0.5 rounded-full">
-                              مُسلِّم العهدة
+                            <span className="text-[10px] text-rose-800 font-bold bg-rose-100 px-2 py-0.5 rounded-full">
+                              مُسلِّم
                             </span>
                           </div>
 
-                          {/* Deliverer Name with Autocomplete */}
-                          <div className="relative">
-                            <div className="flex items-center justify-between mb-1">
-                              <label className="text-xs font-bold text-slate-700">
-                                اسم المسلّم (من الدليل أو كتابة مباشرة)
-                              </label>
-                              <button
-                                type="button"
-                                onClick={() => setShowDelivererDropdown((v) => !v)}
-                                className="text-[11px] font-bold text-rose-700 hover:underline flex items-center gap-0.5"
-                              >
-                                <span>دليل العاملين ({db.recipients.length})</span>
-                                <ChevronDown className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                            <input
-                              type="text"
-                              value={currentReport.delivererName || ''}
-                              onFocus={() => setShowDelivererDropdown(true)}
-                              onBlur={() => setTimeout(() => setShowDelivererDropdown(false), 180)}
-                              onChange={(e) =>
-                                setCurrentReport({ ...currentReport, delivererName: e.target.value })
-                              }
-                              placeholder="اكتب اسم المسلّم أو اختر من الدليل..."
-                              className="w-full px-3 py-2 text-sm font-bold bg-white border border-rose-200 rounded-lg focus:outline-none focus:border-rose-600"
-                            />
-
-                            {showDelivererDropdown && filteredDeliverers.length > 0 && (
-                              <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-52 overflow-y-auto divide-y divide-slate-100">
-                                {filteredDeliverers.map((rec) => (
-                                  <button
-                                    key={`del-${rec.id}`}
-                                    type="button"
-                                    onMouseDown={(e) => {
-                                      e.preventDefault();
-                                      setCurrentReport({
-                                        ...currentReport,
-                                        delivererName: rec.name,
-                                        delivererJobTitle: rec.jobTitle || currentReport.delivererJobTitle,
-                                        delivererDepartmentName:
-                                          rec.departmentName || currentReport.delivererDepartmentName,
-                                        delivererEmployeeCode: rec.employeeCode,
-                                        delivererNationalId: rec.nationalId,
-                                      });
-                                      setShowDelivererDropdown(false);
-                                    }}
-                                    className="w-full text-right px-3 py-2 hover:bg-rose-50 transition-colors flex items-center justify-between gap-2"
-                                  >
-                                    <div>
-                                      <div className="text-xs font-bold text-slate-900">{rec.name}</div>
-                                      <div className="text-[11px] text-slate-500">
-                                        {rec.jobTitle} · {rec.departmentName}
-                                      </div>
-                                    </div>
-                                    {rec.employeeCode && (
-                                      <span className="text-[11px] font-mono-num text-slate-400">
-                                        #{rec.employeeCode}
-                                      </span>
-                                    )}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Deliverer Job Title */}
                           <div>
                             <label className="block text-xs font-bold text-slate-700 mb-1">
-                              وظيفة المسلّم / الصفة
+                              اسم المسلّم (اكتب بحرية أو اختر من القائمة)
+                            </label>
+                            <input
+                              type="text"
+                              list="recipients-datalist"
+                              value={currentReport.delivererName || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const match = db.recipients.find((r) => r.name.trim() === val.trim());
+                                if (match) {
+                                  setCurrentReport({
+                                    ...currentReport,
+                                    delivererName: val,
+                                    delivererJobTitle: match.jobTitle || currentReport.delivererJobTitle,
+                                    delivererDepartmentName: match.departmentName || currentReport.delivererDepartmentName,
+                                    delivererEmployeeCode: match.employeeCode || currentReport.delivererEmployeeCode,
+                                    delivererNationalId: match.nationalId || currentReport.delivererNationalId,
+                                  });
+                                } else {
+                                  setCurrentReport({ ...currentReport, delivererName: val });
+                                }
+                              }}
+                              placeholder="اسم الموظف المسلّم..."
+                              className="w-full h-10 px-3 text-xs sm:text-sm font-bold bg-white border border-rose-200 rounded-lg focus:outline-none focus:border-rose-600"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              الصفة الوظيفية للمسلّم
                             </label>
                             <input
                               type="text"
@@ -1937,90 +2083,27 @@ export default function App() {
                                 setCurrentReport({ ...currentReport, delivererJobTitle: e.target.value })
                               }
                               placeholder="مثال: فني تشغيل / مهندس شبكات..."
-                              className="w-full px-3 py-2 text-sm bg-white border border-rose-200 rounded-lg focus:outline-none focus:border-rose-600"
+                              className="w-full h-10 px-3 text-xs sm:text-sm bg-white border border-rose-200 rounded-lg focus:outline-none focus:border-rose-600"
                             />
                           </div>
 
-                          {/* Deliverer Department */}
-                          <div className="relative">
-                            <div className="flex items-center justify-between mb-1">
-                              <label className="text-xs font-bold text-slate-700">
-                                الإدارة التابعة للمسلّم (الموقع السابق)
-                              </label>
-                              <button
-                                type="button"
-                                onClick={() => setShowDelivererDeptDropdown((v) => !v)}
-                                className="text-[11px] font-bold text-rose-700 hover:underline flex items-center gap-0.5"
-                              >
-                                <span>الإدارات ({db.departments.length})</span>
-                                <ChevronDown className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              الإدارة التابعة للمسلّم (الموقع السابق)
+                            </label>
                             <input
                               type="text"
+                              list="departments-datalist"
                               value={currentReport.delivererDepartmentName || ''}
-                              onFocus={() => setShowDelivererDeptDropdown(true)}
-                              onBlur={() => setTimeout(() => setShowDelivererDeptDropdown(false), 180)}
                               onChange={(e) =>
-                                setCurrentReport({
-                                  ...currentReport,
-                                  delivererDepartmentName: e.target.value,
-                                })
+                                setCurrentReport({ ...currentReport, delivererDepartmentName: e.target.value })
                               }
                               placeholder="مثال: إدارة شبكات مياه دسوق..."
-                              className="w-full px-3 py-2 text-sm font-bold bg-white border border-rose-200 rounded-lg focus:outline-none focus:border-rose-600"
+                              className="w-full h-10 px-3 text-xs sm:text-sm font-semibold bg-white border border-rose-200 rounded-lg focus:outline-none focus:border-rose-600"
                             />
-
-                            {showDelivererDeptDropdown && filteredDelivererDepartments.length > 0 && (
-                              <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
-                                {filteredDelivererDepartments.map((dept) => (
-                                  <button
-                                    key={`del-dept-${dept.id}`}
-                                    type="button"
-                                    onMouseDown={(e) => {
-                                      e.preventDefault();
-                                      setCurrentReport({
-                                        ...currentReport,
-                                        delivererDepartmentName: dept.name,
-                                      });
-                                      setShowDelivererDeptDropdown(false);
-                                    }}
-                                    className="w-full text-right px-3 py-2 hover:bg-rose-50 transition-colors flex items-center justify-between"
-                                  >
-                                    <span className="text-xs font-bold text-slate-900">{dept.name}</span>
-                                    <span className="text-[11px] font-mono-num text-slate-400">
-                                      {dept.code}
-                                    </span>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-
-                            <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                              {db.departments.slice(0, 4).map((dept) => (
-                                <button
-                                  key={`quick-del-${dept.id}`}
-                                  type="button"
-                                  onClick={() =>
-                                    setCurrentReport({
-                                      ...currentReport,
-                                      delivererDepartmentName: dept.name,
-                                    })
-                                  }
-                                  className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors whitespace-nowrap ${
-                                    currentReport.delivererDepartmentName === dept.name
-                                      ? 'bg-rose-700 text-white'
-                                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-rose-100'
-                                  }`}
-                                >
-                                  {dept.name}
-                                </button>
-                              ))}
-                            </div>
                           </div>
 
-                          {/* Code and National ID for Deliverer */}
-                          <div className="grid grid-cols-2 gap-2 pt-1">
+                          <div className="grid grid-cols-2 gap-2">
                             <div>
                               <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
                                 كود الموظف
@@ -2029,13 +2112,10 @@ export default function App() {
                                 type="text"
                                 value={currentReport.delivererEmployeeCode || ''}
                                 onChange={(e) =>
-                                  setCurrentReport({
-                                    ...currentReport,
-                                    delivererEmployeeCode: e.target.value,
-                                  })
+                                  setCurrentReport({ ...currentReport, delivererEmployeeCode: e.target.value })
                                 }
                                 placeholder="مثال: 10482"
-                                className="w-full px-2.5 py-1.5 text-xs font-mono-num bg-white border border-rose-200 rounded-md"
+                                className="w-full h-9 px-2.5 text-xs font-mono-num bg-white border border-rose-200 rounded-lg"
                               />
                             </div>
                             <div>
@@ -2046,188 +2126,88 @@ export default function App() {
                                 type="text"
                                 value={currentReport.delivererNationalId || ''}
                                 onChange={(e) =>
-                                  setCurrentReport({
-                                    ...currentReport,
-                                    delivererNationalId: e.target.value,
-                                  })
+                                  setCurrentReport({ ...currentReport, delivererNationalId: e.target.value })
                                 }
                                 placeholder="14 رقم"
-                                className="w-full px-2.5 py-1.5 text-xs font-mono-num bg-white border border-rose-200 rounded-md"
+                                className="w-full h-9 px-2.5 text-xs font-mono-num bg-white border border-rose-200 rounded-lg"
                               />
                             </div>
                           </div>
                         </div>
 
                         {/* 2. Recipient Card (المُستلِم) */}
-                        <div className="lg:col-span-6 bg-emerald-50/40 border-2 border-emerald-200 rounded-xl p-4 space-y-3">
-                          <div className="flex items-center justify-between pb-2 border-b border-emerald-200">
-                            <span className="flex items-center gap-1.5 font-extrabold text-xs text-emerald-900">
-                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block"></span>
+                        <div className="bg-emerald-50/40 border border-emerald-200 rounded-xl p-3.5 space-y-3">
+                          <div className="flex items-center justify-between pb-1.5 border-b border-emerald-200/80">
+                            <span className="flex items-center gap-1.5 font-bold text-xs text-emerald-900">
+                              <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block"></span>
                               <span>الطرف الثاني: المُسْتَلِم (مستلم العهدة الجديد)</span>
                             </span>
-                            <span className="text-[10.5px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">
-                              مُستلِم العهدة
+                            <span className="text-[10px] text-emerald-800 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">
+                              مُستلِم
                             </span>
                           </div>
 
-                          {/* Recipient Name with Autocomplete */}
-                          <div className="relative">
-                            <div className="flex items-center justify-between mb-1">
-                              <label className="text-xs font-bold text-slate-700">
-                                اسم المستلم (من الدليل أو كتابة مباشرة)
-                              </label>
-                              <button
-                                type="button"
-                                onClick={() => setShowRecipientDropdown((v) => !v)}
-                                className="text-[11px] font-bold text-emerald-700 hover:underline flex items-center gap-0.5"
-                              >
-                                <span>دليل العاملين ({db.recipients.length})</span>
-                                <ChevronDown className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                            <input
-                              type="text"
-                              value={currentReport.recipientName}
-                              onFocus={() => setShowRecipientDropdown(true)}
-                              onBlur={() => setTimeout(() => setShowRecipientDropdown(false), 180)}
-                              onChange={(e) =>
-                                setCurrentReport({ ...currentReport, recipientName: e.target.value })
-                              }
-                              placeholder="اكتب اسم المستلم أو اختر من الدليل..."
-                              className="w-full px-3 py-2 text-sm font-bold bg-white border border-emerald-200 rounded-lg focus:outline-none focus:border-emerald-600"
-                            />
-
-                            {showRecipientDropdown && filteredRecipients.length > 0 && (
-                              <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-52 overflow-y-auto divide-y divide-slate-100">
-                                {filteredRecipients.map((rec) => (
-                                  <button
-                                    key={`rec-trans-${rec.id}`}
-                                    type="button"
-                                    onMouseDown={(e) => {
-                                      e.preventDefault();
-                                      setCurrentReport({
-                                        ...currentReport,
-                                        recipientName: rec.name,
-                                        recipientJobTitle: rec.jobTitle || currentReport.recipientJobTitle,
-                                        departmentName:
-                                          rec.departmentName || currentReport.departmentName,
-                                        recipientEmployeeCode: rec.employeeCode,
-                                        recipientNationalId: rec.nationalId,
-                                      });
-                                      setShowRecipientDropdown(false);
-                                    }}
-                                    className="w-full text-right px-3 py-2 hover:bg-emerald-50 transition-colors flex items-center justify-between gap-2"
-                                  >
-                                    <div>
-                                      <div className="text-xs font-bold text-slate-900">{rec.name}</div>
-                                      <div className="text-[11px] text-slate-500">
-                                        {rec.jobTitle} · {rec.departmentName}
-                                      </div>
-                                    </div>
-                                    {rec.employeeCode && (
-                                      <span className="text-[11px] font-mono-num text-slate-400">
-                                        #{rec.employeeCode}
-                                      </span>
-                                    )}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Recipient Job Title */}
                           <div>
                             <label className="block text-xs font-bold text-slate-700 mb-1">
-                              وظيفة المستلم / الصفة
+                              اسم المستلم (اكتب بحرية أو اختر من القائمة)
+                            </label>
+                            <input
+                              type="text"
+                              list="recipients-datalist"
+                              value={currentReport.recipientName}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const match = db.recipients.find((r) => r.name.trim() === val.trim());
+                                if (match) {
+                                  setCurrentReport({
+                                    ...currentReport,
+                                    recipientName: val,
+                                    recipientJobTitle: match.jobTitle || currentReport.recipientJobTitle,
+                                    departmentName: match.departmentName || currentReport.departmentName,
+                                    recipientEmployeeCode: match.employeeCode || currentReport.recipientEmployeeCode,
+                                    recipientNationalId: match.nationalId || currentReport.recipientNationalId,
+                                  });
+                                } else {
+                                  setCurrentReport({ ...currentReport, recipientName: val });
+                                }
+                              }}
+                              placeholder="اسم الموظف المستلم..."
+                              className="w-full h-10 px-3 text-xs sm:text-sm font-bold bg-white border border-emerald-200 rounded-lg focus:outline-none focus:border-emerald-600"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              الصفة الوظيفية للمستلم
                             </label>
                             <input
                               type="text"
                               value={currentReport.recipientJobTitle}
                               onChange={(e) =>
-                                setCurrentReport({
-                                  ...currentReport,
-                                  recipientJobTitle: e.target.value,
-                                })
+                                setCurrentReport({ ...currentReport, recipientJobTitle: e.target.value })
                               }
                               placeholder="مثال: فني أول تشغيل محطات..."
-                              className="w-full px-3 py-2 text-sm bg-white border border-emerald-200 rounded-lg focus:outline-none focus:border-emerald-600"
+                              className="w-full h-10 px-3 text-xs sm:text-sm bg-white border border-emerald-200 rounded-lg focus:outline-none focus:border-emerald-600"
                             />
                           </div>
 
-                          {/* Recipient Department */}
-                          <div className="relative">
-                            <div className="flex items-center justify-between mb-1">
-                              <label className="text-xs font-bold text-slate-700">
-                                الإدارة التابعة للمستلم (الموقع الجديد)
-                              </label>
-                              <button
-                                type="button"
-                                onClick={() => setShowDeptDropdown((v) => !v)}
-                                className="text-[11px] font-bold text-emerald-700 hover:underline flex items-center gap-0.5"
-                              >
-                                <span>الإدارات ({db.departments.length})</span>
-                                <ChevronDown className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              الإدارة التابعة للمستلم (الموقع الجديد)
+                            </label>
                             <input
                               type="text"
+                              list="departments-datalist"
                               value={currentReport.departmentName}
-                              onFocus={() => setShowDeptDropdown(true)}
-                              onBlur={() => setTimeout(() => setShowDeptDropdown(false), 180)}
                               onChange={(e) =>
                                 setCurrentReport({ ...currentReport, departmentName: e.target.value })
                               }
                               placeholder="مثال: إدارة محطات المياه والروافع..."
-                              className="w-full px-3 py-2 text-sm font-bold bg-white border border-emerald-200 rounded-lg focus:outline-none focus:border-emerald-600"
+                              className="w-full h-10 px-3 text-xs sm:text-sm font-semibold bg-white border border-emerald-200 rounded-lg focus:outline-none focus:border-emerald-600"
                             />
-
-                            {showDeptDropdown && filteredDepartments.length > 0 && (
-                              <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
-                                {filteredDepartments.map((dept) => (
-                                  <button
-                                    key={`rec-dept-${dept.id}`}
-                                    type="button"
-                                    onMouseDown={(e) => {
-                                      e.preventDefault();
-                                      setCurrentReport({
-                                        ...currentReport,
-                                        departmentName: dept.name,
-                                      });
-                                      setShowDeptDropdown(false);
-                                    }}
-                                    className="w-full text-right px-3 py-2 hover:bg-emerald-50 transition-colors flex items-center justify-between"
-                                  >
-                                    <span className="text-xs font-bold text-slate-900">{dept.name}</span>
-                                    <span className="text-[11px] font-mono-num text-slate-400">
-                                      {dept.code}
-                                    </span>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-
-                            <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                              {db.departments.slice(0, 4).map((dept) => (
-                                <button
-                                  key={`quick-rec-${dept.id}`}
-                                  type="button"
-                                  onClick={() =>
-                                    setCurrentReport({ ...currentReport, departmentName: dept.name })
-                                  }
-                                  className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors whitespace-nowrap ${
-                                    currentReport.departmentName === dept.name
-                                      ? 'bg-emerald-700 text-white'
-                                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-emerald-100'
-                                  }`}
-                                >
-                                  {dept.name}
-                                </button>
-                              ))}
-                            </div>
                           </div>
 
-                          {/* Code and National ID for Recipient */}
-                          <div className="grid grid-cols-2 gap-2 pt-1">
+                          <div className="grid grid-cols-2 gap-2">
                             <div>
                               <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
                                 كود الموظف
@@ -2236,13 +2216,10 @@ export default function App() {
                                 type="text"
                                 value={currentReport.recipientEmployeeCode || ''}
                                 onChange={(e) =>
-                                  setCurrentReport({
-                                    ...currentReport,
-                                    recipientEmployeeCode: e.target.value,
-                                  })
+                                  setCurrentReport({ ...currentReport, recipientEmployeeCode: e.target.value })
                                 }
                                 placeholder="مثال: 10819"
-                                className="w-full px-2.5 py-1.5 text-xs font-mono-num bg-white border border-emerald-200 rounded-md"
+                                className="w-full h-9 px-2.5 text-xs font-mono-num bg-white border border-emerald-200 rounded-lg"
                               />
                             </div>
                             <div>
@@ -2253,13 +2230,10 @@ export default function App() {
                                 type="text"
                                 value={currentReport.recipientNationalId || ''}
                                 onChange={(e) =>
-                                  setCurrentReport({
-                                    ...currentReport,
-                                    recipientNationalId: e.target.value,
-                                  })
+                                  setCurrentReport({ ...currentReport, recipientNationalId: e.target.value })
                                 }
                                 placeholder="14 رقم"
-                                className="w-full px-2.5 py-1.5 text-xs font-mono-num bg-white border border-emerald-200 rounded-md"
+                                className="w-full h-9 px-2.5 text-xs font-mono-num bg-white border border-emerald-200 rounded-lg"
                               />
                             </div>
                           </div>
@@ -2271,7 +2245,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={handleSwapDelivererAndRecipient}
-                          className="px-4 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg transition-colors flex items-center gap-2 shadow-xs"
+                          className="px-4 py-2 text-xs font-bold text-slate-800 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition-colors flex items-center gap-2 shadow-2xs"
                           title="عكس بيانات المسلّم والمستلم بضغطة زر واحدة"
                         >
                           <ArrowLeftRight className="w-4 h-4 text-sky-700" />
@@ -2281,80 +2255,44 @@ export default function App() {
                     </div>
                   ) : (
                     /* Normal Single Recipient Form */
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Flexible Recipient Name Input with Smart Search Dropdown */}
-                      <div className="relative">
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-bold text-slate-700">
-                            اسم المستلم (اكتب أي اسم أو اختر من القائمة)
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => setShowRecipientDropdown((v) => !v)}
-                            className="text-[11px] font-bold text-sky-700 hover:underline flex items-center gap-0.5"
-                          >
-                            <span>دليل المستلمين ({db.recipients.length})</span>
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      {/* Recipient Name */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          اسم المستلم (اكتب بحرية أو اختر من القائمة)
+                        </label>
                         <input
                           type="text"
+                          list="recipients-datalist"
                           value={currentReport.recipientName}
-                          onFocus={() => setShowRecipientDropdown(true)}
-                          onBlur={() => setTimeout(() => setShowRecipientDropdown(false), 180)}
-                          onChange={(e) =>
-                            setCurrentReport({ ...currentReport, recipientName: e.target.value })
-                          }
-                          placeholder="اكتب اسم المستلم بحرية أو ابحث..."
-                          className="w-full px-3 py-2 text-sm font-bold bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:border-sky-700 focus:bg-white"
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const match = db.recipients.find((r) => r.name.trim() === val.trim());
+                            if (match) {
+                              setCurrentReport({
+                                ...currentReport,
+                                recipientName: val,
+                                recipientJobTitle: match.jobTitle || currentReport.recipientJobTitle,
+                                departmentName: match.departmentName || currentReport.departmentName,
+                                recipientEmployeeCode: match.employeeCode || currentReport.recipientEmployeeCode,
+                                recipientNationalId: match.nationalId || currentReport.recipientNationalId,
+                              });
+                            } else {
+                              setCurrentReport({ ...currentReport, recipientName: val });
+                            }
+                          }}
+                          placeholder="اكتب اسم المستلم أو ابحث..."
+                          className="w-full h-10 px-3 text-xs sm:text-sm font-bold bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-600 focus:ring-1 focus:ring-sky-600"
                         />
-
-                        {showRecipientDropdown && filteredRecipients.length > 0 && (
-                          <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-56 overflow-y-auto divide-y divide-slate-100">
-                            {filteredRecipients.map((rec) => (
-                              <button
-                                key={rec.id}
-                                type="button"
-                                onMouseDown={(e) => {
-                                  e.preventDefault();
-                                  setCurrentReport({
-                                    ...currentReport,
-                                    recipientName: rec.name,
-                                    recipientJobTitle: rec.jobTitle || currentReport.recipientJobTitle,
-                                    departmentName:
-                                      rec.departmentName || currentReport.departmentName,
-                                    recipientEmployeeCode: rec.employeeCode,
-                                    recipientNationalId: rec.nationalId,
-                                  });
-                                  setShowRecipientDropdown(false);
-                                }}
-                                className="w-full text-right px-3 py-2 hover:bg-sky-50 transition-colors flex items-center justify-between gap-2"
-                              >
-                                <div>
-                                  <div className="text-xs font-bold text-slate-900">{rec.name}</div>
-                                  <div className="text-[11px] text-slate-500">
-                                    {rec.jobTitle} · {rec.departmentName}
-                                  </div>
-                                </div>
-                                {rec.employeeCode && (
-                                  <span className="text-[11px] font-mono-num text-slate-400">
-                                    #{rec.employeeCode}
-                                  </span>
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        )}
                       </div>
 
                       {/* Recipient Job Title */}
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-xs font-bold text-slate-700">
-                            الصفة الوظيفية للمستلم (اختياري)
+                            الصفة الوظيفية للمستلم
                           </label>
-                          <label className="inline-flex items-center gap-1 text-[11px] text-slate-600 cursor-pointer">
+                          <label className="inline-flex items-center gap-1 text-[11px] text-slate-500 cursor-pointer">
                             <input
                               type="checkbox"
                               checked={db.settings.showRecipientJobTitleInPrint}
@@ -2376,78 +2314,40 @@ export default function App() {
                           type="text"
                           value={currentReport.recipientJobTitle}
                           onChange={(e) =>
-                            setCurrentReport({
-                              ...currentReport,
-                              recipientJobTitle: e.target.value,
-                            })
+                            setCurrentReport({ ...currentReport, recipientJobTitle: e.target.value })
                           }
                           placeholder="مثال: مهندس تشغيل / فني شبكات..."
-                          className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:border-sky-700 focus:bg-white"
+                          className="w-full h-10 px-3 text-xs sm:text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-600 focus:ring-1 focus:ring-sky-600"
                         />
                       </div>
 
-                      {/* Flexible Department Selector */}
-                      <div className="relative sm:col-span-2">
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-bold text-slate-700">
-                            الإدارة التابعة (اختر من إدارات منطقة مياه دسوق أو اكتب مباشرة)
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => setShowDeptDropdown((v) => !v)}
-                            className="text-[11px] font-bold text-sky-700 hover:underline flex items-center gap-0.5"
-                          >
-                            <span>قائمة الإدارات ({db.departments.length})</span>
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-
+                      {/* Department Selector */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          الإدارة التابعة (اختر من إدارات منطقة مياه دسوق أو اكتب مباشرة)
+                        </label>
                         <input
                           type="text"
+                          list="departments-datalist"
                           value={currentReport.departmentName}
-                          onFocus={() => setShowDeptDropdown(true)}
-                          onBlur={() => setTimeout(() => setShowDeptDropdown(false), 180)}
                           onChange={(e) =>
                             setCurrentReport({ ...currentReport, departmentName: e.target.value })
                           }
                           placeholder="مثال: إدارة شبكات مياه دسوق / محطة مياه دسوق الرئيسية..."
-                          className="w-full px-3 py-2 text-sm font-bold bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:border-sky-700 focus:bg-white"
+                          className="w-full h-10 px-3 text-xs sm:text-sm font-bold bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-600 focus:ring-1 focus:ring-sky-600"
                         />
 
-                        {showDeptDropdown && filteredDepartments.length > 0 && (
-                          <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-52 overflow-y-auto divide-y divide-slate-100">
-                            {filteredDepartments.map((dept) => (
-                              <button
-                                key={dept.id}
-                                type="button"
-                                onMouseDown={(e) => {
-                                  e.preventDefault();
-                                  setCurrentReport({
-                                    ...currentReport,
-                                    departmentName: dept.name,
-                                  });
-                                  setShowDeptDropdown(false);
-                                }}
-                                className="w-full text-right px-3 py-2 hover:bg-sky-50 transition-colors flex items-center justify-between"
-                              >
-                                <span className="text-xs font-bold text-slate-900">{dept.name}</span>
-                                <span className="text-[11px] font-mono-num text-slate-400">
-                                  {dept.code}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          {db.departments.slice(0, 5).map((dept) => (
+                        {/* Quick 4 chips */}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10.5px] font-bold text-slate-500">إدارات شائعة:</span>
+                          {db.departments.slice(0, 4).map((dept) => (
                             <button
                               key={dept.id}
                               type="button"
                               onClick={() =>
                                 setCurrentReport({ ...currentReport, departmentName: dept.name })
                               }
-                              className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors whitespace-nowrap ${
+                              className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors whitespace-nowrap ${
                                 currentReport.departmentName === dept.name
                                   ? 'bg-sky-700 text-white'
                                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -2458,290 +2358,298 @@ export default function App() {
                           ))}
                         </div>
                       </div>
+
+                      {/* Employee Code & National ID */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          كود الموظف
+                        </label>
+                        <input
+                          type="text"
+                          value={currentReport.recipientEmployeeCode || ''}
+                          onChange={(e) =>
+                            setCurrentReport({ ...currentReport, recipientEmployeeCode: e.target.value })
+                          }
+                          placeholder="مثال: 10819"
+                          className="w-full h-10 px-3 text-xs sm:text-sm font-mono-num bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-600"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          الرقم القومي
+                        </label>
+                        <input
+                          type="text"
+                          value={currentReport.recipientNationalId || ''}
+                          onChange={(e) =>
+                            setCurrentReport({ ...currentReport, recipientNationalId: e.target.value })
+                          }
+                          placeholder="14 رقم قومي"
+                          className="w-full h-10 px-3 text-xs sm:text-sm font-mono-num bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-600"
+                        />
+                      </div>
                     </div>
                   )}
                 </section>
 
-                {/* Section 3: Committee Members & Job Titles */}
-                <section className="space-y-4 pt-2">
+                {/* Section 3: Committee Formations & Members */}
+                <section className="space-y-3.5 pt-2">
                   <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
                     <div>
-                      <h2 className="text-base font-bold text-slate-900">
-                        03. أسماء اللجنة والصفة الوظيفية
+                      <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                        <Users className="w-5 h-5 text-sky-800" />
+                        <span>03. تشكيل لجنة الفحص والاستلام / المناقلة</span>
                       </h2>
-                      <p className="text-xs text-slate-500">
-                        تظهر الأسماء والصفات الوظيفية تلقائياً في ديباجة المحضر وجدول التوقيعات بالأسفل
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        ربط تشكيل اللجان الرسمية مباشرة بالديباجة وجدول التوقيعات مع دعم القوالب الجاهزة
                       </p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
+
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={handleApplyOfficialDefaultCommittee}
-                        className="px-2.5 py-1.5 text-xs font-black text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs whitespace-nowrap"
-                        title="تعيين التشكيل الثلاثي الافتراضي: 1- علي عبداللطيف غزال (رئيسا) | 2- محمد مسعود ابوسمرة (عضوا) | 3- محمود عبداللطيف زينهم (عضوا)"
+                        onClick={() => setActiveTab('committees')}
+                        className="px-2.5 py-1.5 text-xs font-bold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition-colors flex items-center gap-1"
+                        title="الانتقال إلى دليل تشكيلات اللجان وقوالبها"
                       >
-                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                        <span>اللجنة الافتراضية الثلاثية (غزال - ابوسمرة - زينهم)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsSavingPreset((v) => !v)}
-                        className="px-2.5 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center gap-1 whitespace-nowrap"
-                      >
-                        <BookmarkPlus className="w-3.5 h-3.5" />
-                        <span>حفظ كقالب لجنة</span>
+                        <UserCheck className="w-3.5 h-3.5 text-sky-700" />
+                        <span>دليل التشكيلات ↗</span>
                       </button>
                       <button
                         type="button"
                         onClick={addCommitteeMemberRow}
-                        className="px-2.5 py-1.5 text-xs font-bold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition-colors flex items-center gap-1 whitespace-nowrap"
+                        className="px-3 py-1.5 text-xs font-bold text-white bg-sky-800 hover:bg-sky-900 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs whitespace-nowrap"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>إضافة عضو لجنة</span>
+                        <span>إضافة عضو</span>
                       </button>
                     </div>
                   </div>
 
-                  {/* Committee Presets */}
-                  {db.committeePresets.length > 0 && (
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
-                      <div className="text-xs font-bold text-slate-700">
-                        قوالب اللجان الجاهزة (اضغط لاختيار تشكيل اللجنة):
+                  {/* شريط تشكيل وقالب اللجنة المعتمد */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2.5">
+                      <div className="flex-1 min-w-[260px]">
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                          <Award className="w-3.5 h-3.5 text-sky-700" />
+                          <span>قالب وتشكيل اللجنة المعتمد للمحضر:</span>
+                        </label>
+                        <select
+                          value={activePresetId}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === 'official-default') {
+                              handleApplyOfficialDefaultCommittee();
+                            } else if (val === 'custom') {
+                              // keep custom
+                            } else {
+                              const matched = db.committeePresets.find((p) => p.id === val);
+                              if (matched) applyCommitteePreset(matched);
+                            }
+                          }}
+                          className="w-full h-9 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-lg shadow-2xs focus:outline-none focus:border-sky-600 cursor-pointer"
+                        >
+                          <option value="official-default">
+                            ⭐ التشكيل الثلاثي الرسمي المعتمد (غزال - ابوسمرة - زينهم) [منطقة دسوق]
+                          </option>
+                          {db.committeePresets.map((preset) => (
+                            <option key={preset.id} value={preset.id}>
+                              📋 {preset.presetName} ({preset.members.length} أعضاء)
+                            </option>
+                          ))}
+                          {activePresetId === 'custom' && (
+                            <option value="custom">
+                              ✏️ تشكيل مخصص ({currentReport.committeeMembers.length} أعضاء) — معدل يدوياً
+                            </option>
+                          )}
+                        </select>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {db.committeePresets.map((preset) => (
+
+                      <button
+                        type="button"
+                        onClick={handleApplyOfficialDefaultCommittee}
+                        className={`h-9 px-3 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-2xs self-end ${
+                          isOfficialDefaultCommitteeActive
+                            ? 'bg-amber-500 text-white shadow-xs'
+                            : 'bg-white hover:bg-amber-50 text-amber-950 border border-amber-300'
+                        }`}
+                        title="استعادة التشكيل الثلاثي الرسمي المعتمد فوراً"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
+                        <span>التشكيل الافتراضي الثلاثي</span>
+                        {isOfficialDefaultCommitteeActive && <Check className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+
+                    {/* عرض الصفة في جدول التوقيعات */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/80 text-xs">
+                      <span className="text-[11px] font-bold text-slate-600">
+                        الصفة بجدول التوقيعات المطبوع:
+                      </span>
+                      <div className="flex items-center gap-1 bg-slate-200/80 p-0.5 rounded-lg">
+                        {[
+                          { id: 'jobTitle', label: 'الصفة الوظيفية' },
+                          { id: 'committeeRole', label: 'دور اللجنة' },
+                          { id: 'both', label: 'كلاهما' },
+                        ].map((opt) => (
                           <button
-                            key={preset.id}
+                            key={opt.id}
                             type="button"
-                            onClick={() => applyCommitteePreset(preset)}
-                            className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-sky-50 text-slate-800 border border-slate-300 rounded-md transition-colors whitespace-nowrap"
+                            onClick={() =>
+                              setCurrentReport({
+                                ...currentReport,
+                                signatureTableRoleDisplay:
+                                  opt.id as CustodyReport['signatureTableRoleDisplay'],
+                              })
+                            }
+                            className={`px-2.5 py-0.5 text-[11px] font-bold rounded transition-colors whitespace-nowrap ${
+                              currentReport.signatureTableRoleDisplay === opt.id
+                                ? 'bg-white text-slate-900 shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
                           >
-                            {preset.presetName}
+                            {opt.label}
                           </button>
                         ))}
                       </div>
                     </div>
-                  )}
-
-                  {isSavingPreset && (
-                    <div className="bg-sky-50 border border-sky-200 rounded-lg p-3 flex flex-wrap items-center gap-2">
-                      <input
-                        type="text"
-                        value={newPresetName}
-                        onChange={(e) => setNewPresetName(e.target.value)}
-                        placeholder="اكتب اسم قالب اللجنة الجديد..."
-                        className="flex-1 min-w-[220px] px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleSaveCurrentCommitteeAsPreset}
-                        className="px-3 py-1.5 text-xs font-bold text-white bg-sky-700 hover:bg-sky-800 rounded-md whitespace-nowrap"
-                      >
-                        تأكيد الحفظ
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsSavingPreset(false)}
-                        className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900"
-                      >
-                        إلغاء
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
-                    <span className="text-xs font-bold text-slate-700">
-                      عمود «الصفة» بجدول التوقيعات أسفل المحضر:
-                    </span>
-                    <div className="flex items-center gap-1 bg-slate-200/80 p-1 rounded-md">
-                      {[
-                        { id: 'jobTitle', label: 'الصفة الوظيفية' },
-                        { id: 'committeeRole', label: 'دور اللجنة (رئيسا/عضوا)' },
-                        { id: 'both', label: 'الصفة الوظيفية + الدور' },
-                      ].map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() =>
-                            setCurrentReport({
-                              ...currentReport,
-                              signatureTableRoleDisplay:
-                                opt.id as CustodyReport['signatureTableRoleDisplay'],
-                            })
-                          }
-                          className={`px-2.5 py-1 text-[11px] font-bold rounded transition-colors whitespace-nowrap ${
-                            currentReport.signatureTableRoleDisplay === opt.id
-                              ? 'bg-white text-slate-900 shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
                   </div>
 
-                  {/* Dynamic Committee Rows */}
+                  {/* أعضاء اللجنة - كروت سريعة وانسيابية */}
                   <div className="space-y-3">
-                    {currentReport.committeeMembers.map((member, idx) => (
-                      <div
-                        key={member.id || idx}
-                        className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2.5 shadow-2xs"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs font-bold text-slate-800 font-mono-num flex items-center gap-1.5">
-                              <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[11px]">
+                    {currentReport.committeeMembers.map((member, idx) => {
+                      const isChairman = idx === 0 || member.committeeRole === 'رئيسا';
+                      const isOfficialSlot1 = idx === 0 && member.name?.trim() === 'علي عبداللطيف غزال';
+                      const isOfficialSlot2 = idx === 1 && member.name?.trim() === 'محمد مسعود ابوسمرة';
+                      const isOfficialSlot3 = idx === 2 && member.name?.trim() === 'محمود عبداللطيف زينهم';
+                      const isOfficialMatch = isOfficialSlot1 || isOfficialSlot2 || isOfficialSlot3;
+
+                      return (
+                        <div
+                          key={member.id || idx}
+                          className="p-3 bg-white border border-slate-200 rounded-xl space-y-2.5 shadow-2xs hover:border-slate-300 transition-all"
+                        >
+                          {/* Card Header */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`w-5 h-5 rounded-md text-white font-bold text-xs flex items-center justify-center ${
+                                  isChairman ? 'bg-amber-600' : 'bg-sky-800'
+                                }`}
+                              >
                                 {idx + 1}
                               </span>
-                              عضو اللجنة رقم ({idx + 1})
-                            </span>
-
-                            {/* One-click slot defaults for members 1, 2, and 3 */}
-                            {idx === 0 && (
-                              <button
-                                type="button"
-                                onClick={() => handleApplyDefaultMemberToSlot(0)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-black text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md transition-colors shadow-2xs"
-                                title="تعيين القيمة الافتراضية: علي عبداللطيف غزال (رئيسا)"
-                              >
-                                <Sparkles className="w-3 h-3 text-amber-600" />
-                                <span>الافتراضي: علي عبداللطيف غزال (رئيسا)</span>
-                              </button>
-                            )}
-                            {idx === 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleApplyDefaultMemberToSlot(1)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-black text-sky-900 bg-sky-100 hover:bg-sky-200 border border-sky-300 rounded-md transition-colors shadow-2xs"
-                                title="تعيين القيمة الافتراضية: محمد مسعود ابوسمرة (عضوا)"
-                              >
-                                <Sparkles className="w-3 h-3 text-sky-600" />
-                                <span>الافتراضي: محمد مسعود ابوسمرة (عضوا)</span>
-                              </button>
-                            )}
-                            {idx === 2 && (
-                              <button
-                                type="button"
-                                onClick={() => handleApplyDefaultMemberToSlot(2)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-black text-indigo-900 bg-indigo-100 hover:bg-indigo-200 border border-indigo-300 rounded-md transition-colors shadow-2xs"
-                                title="تعيين القيمة الافتراضية: محمود عبداللطيف زينهم (عضوا)"
-                              >
-                                <Sparkles className="w-3 h-3 text-indigo-600" />
-                                <span>الافتراضي: محمود عبداللطيف زينهم (عضوا)</span>
-                              </button>
-                            )}
-                          </div>
-
-                          {currentReport.committeeMembers.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeCommitteeMemberRow(idx)}
-                              className="text-xs text-rose-600 hover:text-rose-800 flex items-center gap-1 px-2 py-0.5 rounded hover:bg-rose-50 transition-colors"
-                              title="حذف هذا العضو من اللجنة"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>حذف</span>
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
-                          {/* Prefix */}
-                          <div className="sm:col-span-2">
-                            <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
-                              اللقب
-                            </label>
-                            <input
-                              type="text"
-                              list="prefixes-list"
-                              value={member.prefix}
-                              onChange={(e) =>
-                                updateCommitteeMember(idx, 'prefix', e.target.value)
-                              }
-                              placeholder="السيد الأستاذ /"
-                              className="w-full px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-lg shadow-2xs focus:border-sky-600 focus:outline-none"
-                            />
-                          </div>
-
-                          {/* Professional Combobox for Committee Member Name */}
-                          <div className="sm:col-span-5">
-                            <div className="flex items-center justify-between mb-0.5">
-                              <label className="block text-[11px] font-bold text-slate-700">
-                                اسم عضو اللجنة (كامبو بوكس احترافي)
-                              </label>
-                              {idx === 0 && (
-                                <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
-                                  رئيس اللجنة (غزال)
-                                </span>
-                              )}
-                              {idx === 1 && (
-                                <span className="text-[10px] font-bold text-sky-800 bg-sky-50 px-1.5 py-0.2 rounded border border-sky-200">
-                                  عضو (ابوسمرة)
-                                </span>
-                              )}
-                              {idx === 2 && (
-                                <span className="text-[10px] font-bold text-indigo-800 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
-                                  عضو (زينهم)
+                              <span className="text-xs font-bold text-slate-800">
+                                {isChairman ? 'رئيس اللجنة (العضو 1)' : `عضو اللجنة (${idx + 1})`}
+                              </span>
+                              {isOfficialMatch && (
+                                <span className="text-[10px] font-bold text-amber-900 bg-amber-100 px-1.5 py-0.2 rounded-full border border-amber-200">
+                                  معتمد رسمياً
                                 </span>
                               )}
                             </div>
-                            <CommitteeMemberCombobox
-                              memberIndex={idx}
-                              member={member}
-                              registeredMembers={db.committeeMembers}
-                              onSelectMember={(selectedData) => {
-                                const updated = [...currentReport.committeeMembers];
-                                updated[idx] = {
-                                  ...updated[idx],
-                                  name: selectedData.name,
-                                  prefix: selectedData.prefix || updated[idx].prefix,
-                                  jobTitle: selectedData.jobTitle,
-                                  committeeRole: selectedData.committeeRole || updated[idx].committeeRole,
-                                  department: selectedData.department,
-                                };
-                                setCurrentReport({ ...currentReport, committeeMembers: updated });
-                              }}
-                              onUpdateName={(name) => updateCommitteeMember(idx, 'name', name)}
-                              placeholder={`ابحث أو اختر عضو اللجنة رقم (${idx + 1})...`}
-                            />
+
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {/* Quick Role Toggle */}
+                              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                                {[
+                                  { role: 'رئيسا', label: 'رئيساً' },
+                                  { role: 'عضوا', label: 'عضواً' },
+                                  { role: 'أمين سر اللجنة', label: 'أمين سر' },
+                                  { role: 'أمين مخزن', label: 'أمين مخزن' },
+                                ].map((r) => (
+                                  <button
+                                    key={r.role}
+                                    type="button"
+                                    onClick={() => updateCommitteeMember(idx, 'committeeRole', r.role)}
+                                    className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors whitespace-nowrap ${
+                                      member.committeeRole === r.role
+                                        ? 'bg-sky-800 text-white shadow-2xs'
+                                        : 'text-slate-600 hover:text-slate-900'
+                                    }`}
+                                  >
+                                    {r.label}
+                                  </button>
+                                ))}
+                              </div>
+
+                              {/* Slot Default Restore */}
+                              {idx < 3 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleApplyDefaultMemberToSlot(idx)}
+                                  className="text-[10px] font-bold text-amber-950 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded border border-amber-200 transition-colors"
+                                  title="استعادة العضو الافتراضي لهذا السطر"
+                                >
+                                  {idx === 0 ? 'افتراضي: غزال' : idx === 1 ? 'افتراضي: ابوسمرة' : 'افتراضي: زينهم'}
+                                </button>
+                              )}
+
+                              {currentReport.committeeMembers.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeCommitteeMemberRow(idx)}
+                                  className="text-xs text-rose-600 hover:text-rose-800 hover:bg-rose-50 p-1 rounded transition-colors"
+                                  title="حذف هذا العضو"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </div>
 
-                          {/* Committee Role */}
-                          <div className="sm:col-span-2">
-                            <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
-                              صفة اللجنة
-                            </label>
-                            <input
-                              type="text"
-                              list="committee-roles-list"
-                              value={member.committeeRole}
-                              onChange={(e) =>
-                                updateCommitteeMember(idx, 'committeeRole', e.target.value)
-                              }
-                              placeholder="رئيسا / عضوا"
-                              className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-lg shadow-2xs focus:border-sky-600 focus:outline-none"
-                            />
-                          </div>
+                          {/* Fields 4-column Grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                            <div className="sm:col-span-3">
+                              <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                                اللقب بالديباجة
+                              </label>
+                              <input
+                                type="text"
+                                list="prefixes-list"
+                                value={member.prefix}
+                                onChange={(e) => updateCommitteeMember(idx, 'prefix', e.target.value)}
+                                placeholder="السيد الأستاذ /"
+                                className="w-full h-9 px-2.5 text-xs font-bold text-slate-800 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-600"
+                              />
+                            </div>
 
-                          {/* Job Title */}
-                          <div className="sm:col-span-3">
-                            <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
-                              الصفة الوظيفية
-                            </label>
-                            <input
-                              type="text"
-                              value={member.jobTitle}
-                              onChange={(e) =>
-                                updateCommitteeMember(idx, 'jobTitle', e.target.value)
-                              }
-                              placeholder="مثال: مدير إدارة المخازن..."
-                              className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg shadow-2xs focus:border-sky-600 focus:outline-none"
-                            />
+                            <div className="sm:col-span-5">
+                              <label className="block text-[11px] font-bold text-slate-700 mb-0.5 flex items-center justify-between">
+                                <span>اسم عضو اللجنة</span>
+                                {member.department && (
+                                  <span className="text-[10px] text-slate-500 font-normal truncate max-w-[120px]">
+                                    {member.department}
+                                  </span>
+                                )}
+                              </label>
+                              <input
+                                type="text"
+                                list="committee-members-datalist"
+                                value={member.name}
+                                onChange={(e) => updateCommitteeMember(idx, 'name', e.target.value)}
+                                placeholder="اكتب الاسم أو اختر من القائمة..."
+                                className="w-full h-9 px-2.5 text-xs font-bold text-slate-900 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-600 focus:ring-1 focus:ring-sky-600"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-4">
+                              <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                                الصفة الوظيفية بالشركة
+                              </label>
+                              <input
+                                type="text"
+                                value={member.jobTitle}
+                                onChange={(e) => updateCommitteeMember(idx, 'jobTitle', e.target.value)}
+                                placeholder="مثال: مدير إدارة المخازن والعهد..."
+                                className="w-full h-9 px-2.5 text-xs font-semibold text-slate-800 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-600"
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   <datalist id="prefixes-list">
@@ -2849,24 +2757,25 @@ export default function App() {
                                     'ماكينة شحن فوري موديل (A960) سريال نمبر (............)'
                                   )
                                 }
-                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-sky-900 bg-sky-100 hover:bg-sky-200 border border-sky-300 rounded transition-colors shadow-2xs"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-sky-900 bg-sky-100 hover:bg-sky-200 border border-sky-300 rounded transition-colors"
                                 title="تعيين الصنف الافتراضي: ماكينة شحن فوري موديل (A960)"
                               >
                                 <Sparkles className="w-3 h-3 text-sky-600" />
-                                <span>الافتراضي: ماكينة شحن فوري موديل (A960) سريال نمبر (............)</span>
+                                <span>الافتراضي: ماكينة شحن فوري A960</span>
                               </button>
                             </div>
                             <input
                               type="text"
+                              list="catalog-items-datalist"
                               value={item.itemName}
                               onChange={(e) => updateItemRow(idx, 'itemName', e.target.value)}
-                              placeholder="ماكينة شحن فوري موديل (A960) سريال نمبر (............)"
-                              className="w-full px-3 py-2 text-sm font-semibold bg-white border border-slate-300 rounded-md focus:border-sky-700 focus:outline-none"
+                              placeholder="اكتب اسم الصنف أو اختر من الكتالوج..."
+                              className="w-full h-10 px-3 text-xs sm:text-sm font-semibold bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-600 focus:ring-1 focus:ring-sky-600"
                             />
                           </div>
 
                           <div className="sm:col-span-2">
-                            <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+                            <label className="block text-[11px] font-bold text-slate-600 mb-0.5">
                               الوحدة
                             </label>
                             <input
@@ -2875,12 +2784,12 @@ export default function App() {
                               value={item.unit}
                               onChange={(e) => updateItemRow(idx, 'unit', e.target.value)}
                               placeholder="عدد"
-                              className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-md text-center"
+                              className="w-full h-9 px-2.5 text-xs font-bold bg-white border border-slate-300 rounded-lg text-center focus:outline-none focus:border-sky-600"
                             />
                           </div>
 
                           <div className="sm:col-span-2">
-                            <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+                            <label className="block text-[11px] font-bold text-slate-600 mb-0.5">
                               الكمية
                             </label>
                             <input
@@ -2889,24 +2798,24 @@ export default function App() {
                               step="any"
                               value={item.quantity}
                               onChange={(e) => updateItemRow(idx, 'quantity', e.target.value)}
-                              className="w-full px-2.5 py-1.5 text-xs font-bold font-mono-num bg-white border border-slate-300 rounded-md text-center"
+                              className="w-full h-9 px-2.5 text-xs font-bold font-mono-num bg-white border border-slate-300 rounded-lg text-center focus:outline-none focus:border-sky-600"
                             />
                           </div>
 
                           <div className="sm:col-span-4">
-                            <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
-                              تفقيط الكمية (تلقائي وقابل للتعديل)
+                            <label className="block text-[11px] font-bold text-slate-600 mb-0.5">
+                              تفقيط الكمية (تلقائي فوري)
                             </label>
                             <input
                               type="text"
                               value={item.tafqeet}
                               onChange={(e) => updateItemRow(idx, 'tafqeet', e.target.value)}
-                              className="w-full px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-md"
+                              className="w-full h-9 px-2.5 text-xs font-semibold bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-600"
                             />
                           </div>
 
                           <div className="sm:col-span-4">
-                            <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+                            <label className="block text-[11px] font-bold text-slate-600 mb-0.5">
                               ملاحظات
                             </label>
                             <input
@@ -2914,7 +2823,7 @@ export default function App() {
                               value={item.notes}
                               onChange={(e) => updateItemRow(idx, 'notes', e.target.value)}
                               placeholder="جديد وصالح للعمل..."
-                              className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
+                              className="w-full h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-600"
                             />
                           </div>
                         </div>
@@ -2922,6 +2831,40 @@ export default function App() {
                     ))}
                   </div>
 
+                  {/* Global Data Lists for Blazing Fast Native Autocomplete */}
+                  <datalist id="recipients-datalist">
+                    {db.recipients.map((r) => (
+                      <option key={`rec-dl-${r.id}`} value={r.name}>
+                        {r.jobTitle} - {r.departmentName}
+                      </option>
+                    ))}
+                  </datalist>
+                  <datalist id="departments-datalist">
+                    {db.departments.map((d) => (
+                      <option key={`dept-dl-${d.id}`} value={d.name}>
+                        {d.code}
+                      </option>
+                    ))}
+                  </datalist>
+                  <datalist id="committee-members-datalist">
+                    {OFFICIAL_DEFAULT_MEMBERS.map((m) => (
+                      <option key={`off-cm-${m.name}`} value={m.name}>
+                        {m.jobTitle} - {m.departmentName}
+                      </option>
+                    ))}
+                    {db.committeeMembers.map((cm) => (
+                      <option key={`cm-dl-${cm.id}`} value={cm.name}>
+                        {cm.jobTitle} - {cm.departmentName}
+                      </option>
+                    ))}
+                  </datalist>
+                  <datalist id="catalog-items-datalist">
+                    {db.catalogItems.map((c) => (
+                      <option key={`cat-dl-${c.id}`} value={c.itemName}>
+                        {c.defaultUnit}
+                      </option>
+                    ))}
+                  </datalist>
                   <datalist id="units-list">
                     {DEFAULT_UNITS.map((u) => (
                       <option key={u} value={u} />
@@ -2949,13 +2892,13 @@ export default function App() {
                           setCurrentReport({ ...currentReport, approverTitle: e.target.value })
                         }
                         placeholder="مدير عام المنطقة"
-                        className="w-full px-3 py-2 text-sm font-semibold bg-slate-50 border border-slate-300 rounded-lg"
+                        className="w-full h-10 px-3 text-xs sm:text-sm font-semibold bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-600 focus:ring-1 focus:ring-sky-600"
                       />
                     </div>
                     <div>
                       <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
                         <label className="block text-xs font-bold text-slate-700">
-                          اسم مدير عام المنطقة (اختياري)
+                          اسم مدير عام المنطقة
                         </label>
                         <button
                           type="button"
@@ -2965,11 +2908,11 @@ export default function App() {
                               approverName: 'مهندس/ هاني البسيوني',
                             })
                           }
-                          className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded transition-colors shadow-2xs"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded transition-colors"
                           title="تعيين الاسم الافتراضي: مهندس/ هاني البسيوني"
                         >
                           <Sparkles className="w-3 h-3 text-amber-600" />
-                          <span>الافتراضي: مهندس/ هاني البسيوني</span>
+                          <span>الافتراضي: م/ هاني البسيوني</span>
                         </button>
                       </div>
                       <input
@@ -2979,7 +2922,7 @@ export default function App() {
                           setCurrentReport({ ...currentReport, approverName: e.target.value })
                         }
                         placeholder="مهندس/ هاني البسيوني"
-                        className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-sky-600 focus:outline-none"
+                        className="w-full h-10 px-3 text-xs sm:text-sm font-bold bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-600 focus:ring-1 focus:ring-sky-600"
                       />
                     </div>
                     <div className="sm:col-span-2">
@@ -2993,7 +2936,7 @@ export default function App() {
                           setCurrentReport({ ...currentReport, generalNotes: e.target.value })
                         }
                         placeholder="أي بيان إضافي يظهر تحت جدول الأصناف..."
-                        className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg"
+                        className="w-full h-10 px-3 text-xs sm:text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-600 focus:ring-1 focus:ring-sky-600"
                       />
                     </div>
                   </div>
@@ -3206,7 +3149,7 @@ export default function App() {
                 <div className="overflow-x-auto pb-6">
                   <PrintableReceiptSheet
                     sheetId="official-receipt-sheet"
-                    report={activeReport}
+                    report={debouncedReport}
                     settings={activeDb.settings}
                     showReportNumberBadge={true}
                     fontSizeScale={printFontSize}
@@ -5281,255 +5224,794 @@ export default function App() {
           </div>
         )}
 
-        {/* ==================== TAB 4: COMMITTEES & CATALOG ==================== */}
+        {/* ==================== TAB 4: COMMITTEES & DIRECTORY ==================== */}
         {activeTab === 'committees' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-6 bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-              <div className="border-b border-slate-200 pb-3">
-                <h2 className="text-base font-bold text-slate-900">
-                  سجل أعضاء اللجان والصفات الوظيفية ({db.committeeMembers.length})
-                </h2>
-                <p className="text-xs text-slate-500">
-                  أسماء اللجنة والصفة الوظيفية المسجلة لسرعة التعبئة والاختيار
-                </p>
-              </div>
-
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-2.5">
-                <div className="text-xs font-bold text-slate-800">تسجيل عضو لجنة جديد:</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    list="prefixes-list"
-                    value={newCommitteeMember.prefix}
-                    onChange={(e) =>
-                      setNewCommitteeMember({ ...newCommitteeMember, prefix: e.target.value })
-                    }
-                    placeholder="اللقب (السيد الأستاذ / ...)"
-                    className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
-                  />
-                  <input
-                    type="text"
-                    value={newCommitteeMember.name}
-                    onChange={(e) =>
-                      setNewCommitteeMember({ ...newCommitteeMember, name: e.target.value })
-                    }
-                    placeholder="اسم عضو اللجنة *"
-                    className="px-3 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-md"
-                  />
-                  <input
-                    type="text"
-                    value={newCommitteeMember.jobTitle}
-                    onChange={(e) =>
-                      setNewCommitteeMember({ ...newCommitteeMember, jobTitle: e.target.value })
-                    }
-                    placeholder="الصفة الوظيفية"
-                    className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
-                  />
-                  <input
-                    type="text"
-                    list="committee-roles-list"
-                    value={newCommitteeMember.defaultCommitteeRole}
-                    onChange={(e) =>
-                      setNewCommitteeMember({
-                        ...newCommitteeMember,
-                        defaultCommitteeRole: e.target.value,
-                      })
-                    }
-                    placeholder="الدور (رئيسا / عضوا)"
-                    className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
-                  />
+          <div className="space-y-6">
+            {/* Header with Sub-tabs navigation */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                <div>
+                  <h1 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                    <UserCheck className="w-5 h-5 text-sky-800" />
+                    <span>دليل تشكيلات وقوالب اللجان وأعضائها المعتمدين</span>
+                  </h1>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    إدارة قوالب تشكيل اللجان الرسمية، ربطها مباشرة بمحرر المحاضر والنماذج، وإدارة سجل الأعضاء والكتالوج
+                  </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!newCommitteeMember.name.trim()) return;
-                    const cm: CommitteeMemberRecord = {
-                      ...newCommitteeMember,
-                      id: `cm-db-${Date.now()}`,
-                      name: newCommitteeMember.name.trim(),
-                    };
-                    await syncDatabase(
-                      { ...db, committeeMembers: [cm, ...db.committeeMembers] },
-                      `تم حفظ عضو اللجنة "${cm.name}" في قاعدة البيانات`
-                    );
-                    setNewCommitteeMember({
-                      prefix: 'السيد الأستاذ /',
-                      name: '',
-                      jobTitle: '',
-                      defaultCommitteeRole: 'عضوا',
-                      departmentName: 'منطقة مياه دسوق',
-                    });
-                  }}
-                  className="w-full py-1.5 text-xs font-bold text-white bg-sky-700 hover:bg-sky-800 rounded-md"
-                >
-                  إضافة لدليل أعضاء اللجان
-                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('editor')}
+                    className="px-4 py-2 text-xs font-bold text-white bg-sky-800 hover:bg-sky-900 rounded-xl transition-all shadow-xs flex items-center gap-1.5"
+                  >
+                    <span>العودة لمحرر المحاضر ↵</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="divide-y divide-slate-200 border border-slate-200 rounded-lg">
-                {db.committeeMembers.map((cm) => (
-                  <div
-                    key={cm.id}
-                    className="p-3 hover:bg-slate-50 flex items-center justify-between gap-2"
-                  >
-                    <div>
-                      <div className="text-xs font-bold text-slate-900">
-                        {cm.prefix} {cm.name}
-                      </div>
-                      <div className="text-[11px] text-slate-600">
-                        الصفة الوظيفية: {cm.jobTitle || '—'} · الدور: ({cm.defaultCommitteeRole})
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingCommitteeMember({ ...cm });
-                          setIsEditCommitteeMemberModalOpen(true);
-                        }}
-                        className="px-2 py-1 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-md border border-amber-300 flex items-center gap-1 shadow-2xs transition-colors"
-                        title="تعديل بيانات عضو اللجنة والصفة والدور"
+              {/* Sub-tabs pills */}
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  {
+                    id: 'presets',
+                    label: 'قوالب وتشكيلات اللجان الرسمية',
+                    count: db.committeePresets.length + 1, // +1 for the official default committee
+                    icon: Award,
+                  },
+                  {
+                    id: 'members',
+                    label: 'سجل أعضاء اللجان الفردي',
+                    count: db.committeeMembers.length,
+                    icon: Users,
+                  },
+                  {
+                    id: 'catalog',
+                    label: 'كتالوج الأصناف المتكررة',
+                    count: db.catalogItems.length,
+                    icon: Package,
+                  },
+                ].map((st) => {
+                  const Icon = st.icon;
+                  const isActive = committeesActiveView === st.id;
+                  return (
+                    <button
+                      key={st.id}
+                      type="button"
+                      onClick={() => setCommitteesActiveView(st.id as typeof committeesActiveView)}
+                      className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 ${
+                        isActive
+                          ? 'bg-sky-800 text-white shadow-2xs'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span>{st.label}</span>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                          isActive
+                            ? 'bg-white/20 text-white'
+                            : 'bg-white text-slate-700 border border-slate-300'
+                        }`}
                       >
-                        <Pencil className="w-3.5 h-3.5 text-amber-700" />
-                        <span>تعديل</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          syncDatabase(
-                            {
-                              ...db,
-                              committeeMembers: db.committeeMembers.filter((x) => x.id !== cm.id),
-                            },
-                            'تم حذف العضو من الدليل'
-                          )
-                        }
-                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
-                        title="حذف"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                        {st.count}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Catalog */}
-            <div className="lg:col-span-6 bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-              <div className="border-b border-slate-200 pb-3">
-                <h2 className="text-base font-bold text-slate-900">
-                  كتالوج أصناف العهد المتكررة ({db.catalogItems.length})
-                </h2>
-                <p className="text-xs text-slate-500">
-                  الأصناف المتكررة لتسريع إدراجها داخل جدول محضر الاستلام
-                </p>
-              </div>
-
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-2.5">
-                <div className="text-xs font-bold text-slate-800">إضافة صنف جديد للكتالوج:</div>
-                <input
-                  type="text"
-                  value={newCatalogItem.itemName}
-                  onChange={(e) =>
-                    setNewCatalogItem({ ...newCatalogItem, itemName: e.target.value })
-                  }
-                  placeholder="اسم الصنف وبياناته بالتفصيل *"
-                  className="w-full px-3 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-md"
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    list="units-list"
-                    value={newCatalogItem.defaultUnit}
-                    onChange={(e) =>
-                      setNewCatalogItem({ ...newCatalogItem, defaultUnit: e.target.value })
-                    }
-                    placeholder="الوحدة الافتراضية"
-                    className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
-                  />
-                  <input
-                    type="text"
-                    value={newCatalogItem.defaultNotes}
-                    onChange={(e) =>
-                      setNewCatalogItem({ ...newCatalogItem, defaultNotes: e.target.value })
-                    }
-                    placeholder="الملاحظات الافتراضية"
-                    className="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!newCatalogItem.itemName.trim()) return;
-                    const item: CatalogItemRecord = {
-                      ...newCatalogItem,
-                      id: `cat-${Date.now()}`,
-                      itemName: newCatalogItem.itemName.trim(),
-                    };
-                    await syncDatabase(
-                      { ...db, catalogItems: [item, ...db.catalogItems] },
-                      'تم حفظ الصنف بالكتالوج'
-                    );
-                    setNewCatalogItem({
-                      itemName: '',
-                      defaultUnit: 'عدد',
-                      category: 'مهمات تشغيل وصيانة',
-                      defaultNotes: 'جديد وصالح للعمل',
-                    });
-                  }}
-                  className="w-full py-1.5 text-xs font-bold text-white bg-sky-700 hover:bg-sky-800 rounded-md"
-                >
-                  حفظ الصنف بالكتالوج
-                </button>
-              </div>
-
-              <div className="divide-y divide-slate-200 border border-slate-200 rounded-lg">
-                {db.catalogItems.map((cat) => (
-                  <div
-                    key={cat.id}
-                    className="p-3 hover:bg-slate-50 flex items-center justify-between gap-2"
+            {/* Sub-tab 1: Committee Formations & Presets */}
+            {committeesActiveView === 'presets' && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-sky-50 via-white to-sky-50 border border-sky-200 rounded-2xl p-4">
+                  <div>
+                    <h2 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                      <Award className="w-4 h-4 text-sky-800" />
+                      <span>قوالب وتشكيلات اللجان المرتبطة بمحرر المحاضر</span>
+                    </h2>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      اضغط على «تطبيق على المحضر الحالي» لاعتماد التشكيل فوراً بالنموذج المفتوح، أو «إنشاء محضر جديد» للبدء به مباشرة
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingNewPreset((v) => !v)}
+                    className="px-3.5 py-2 text-xs font-bold text-white bg-sky-800 hover:bg-sky-900 rounded-xl transition-all shadow-xs flex items-center gap-1.5 whitespace-nowrap"
                   >
-                    <div>
-                      <div className="text-xs font-bold text-slate-900">{cat.itemName}</div>
-                      <div className="text-[11px] text-slate-500">
-                        الوحدة: {cat.defaultUnit} · الملاحظات: {cat.defaultNotes || '—'}
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{isAddingNewPreset ? 'إغلاق نموذج الإضافة' : 'إنشاء قالب تشكيل لجنة جديد'}</span>
+                  </button>
+                </div>
+
+                {/* Form to create new committee preset */}
+                {isAddingNewPreset && (
+                  <div className="bg-white border-2 border-sky-300 rounded-2xl p-5 shadow-sm space-y-4 animate-in fade-in-50 duration-200">
+                    <div className="border-b border-slate-100 pb-2">
+                      <h3 className="text-sm font-bold text-slate-900">
+                        إنشاء قالب تشكيل لجنة جديد وحفظه بالدليل:
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        اكتب اسم التشكيل والوصف وحدد الأعضاء المسجلين بالدليل لربطهم بالقالب
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          اسم تشكيل اللجنة *
+                        </label>
+                        <input
+                          type="text"
+                          value={newPresetForm.name}
+                          onChange={(e) =>
+                            setNewPresetForm({ ...newPresetForm, name: e.target.value })
+                          }
+                          placeholder="مثال: لجنة فحص وصيانة شبكات مياه دسوق"
+                          className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-sky-700 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          وصف التشكيل واختصاصه
+                        </label>
+                        <input
+                          type="text"
+                          value={newPresetForm.description}
+                          onChange={(e) =>
+                            setNewPresetForm({ ...newPresetForm, description: e.target.value })
+                          }
+                          placeholder="مثال: اللجنة المختصة بمناقلة واستلام مهمات الشبكات"
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-sky-700 focus:outline-none"
+                        />
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        اختر أعضاء اللجنة من الدليل ({newPresetForm.selectedMemberIds.length} تم اختيارهم):
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-56 overflow-y-auto p-1 border border-slate-200 rounded-xl bg-slate-50/50">
+                        {db.committeeMembers.map((cm) => {
+                          const isSelected = newPresetForm.selectedMemberIds.includes(cm.id);
+                          return (
+                            <button
+                              key={cm.id}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setNewPresetForm({
+                                    ...newPresetForm,
+                                    selectedMemberIds: newPresetForm.selectedMemberIds.filter(
+                                      (id) => id !== cm.id
+                                    ),
+                                  });
+                                } else {
+                                  setNewPresetForm({
+                                    ...newPresetForm,
+                                    selectedMemberIds: [...newPresetForm.selectedMemberIds, cm.id],
+                                  });
+                                }
+                              }}
+                              className={`p-2.5 rounded-lg border text-right transition-all flex items-center justify-between gap-2 ${
+                                isSelected
+                                  ? 'bg-sky-50 border-sky-500 font-bold shadow-2xs'
+                                  : 'bg-white border-slate-200 hover:border-slate-300'
+                              }`}
+                            >
+                              <div className="truncate">
+                                <div className="text-xs font-bold text-slate-900 truncate">
+                                  {cm.name}
+                                </div>
+                                <div className="text-[10px] text-slate-500 truncate">
+                                  {cm.jobTitle} · ({cm.defaultCommitteeRole})
+                                </div>
+                              </div>
+                              <span
+                                className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
+                                  isSelected
+                                    ? 'bg-sky-800 text-white border-sky-800'
+                                    : 'border-slate-300 bg-white'
+                                }`}
+                              >
+                                {isSelected && <Check className="w-3 h-3 text-white" />}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
                       <button
                         type="button"
-                        onClick={() => {
-                          setEditingCatalogItem({ ...cat });
-                          setIsEditCatalogItemModalOpen(true);
-                        }}
-                        className="px-2 py-1 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-md border border-amber-300 flex items-center gap-1 shadow-2xs transition-colors"
-                        title="تعديل بيانات الصنف والوحدة والملاحظات"
+                        onClick={handleAddNewPresetFromForm}
+                        className="px-5 py-2 text-xs font-bold text-white bg-sky-800 hover:bg-sky-900 rounded-xl shadow-xs transition-colors"
                       >
-                        <Pencil className="w-3.5 h-3.5 text-amber-700" />
-                        <span>تعديل</span>
+                        حفظ التشكيل بقاعدة البيانات
                       </button>
                       <button
                         type="button"
-                        onClick={() =>
-                          syncDatabase(
-                            {
-                              ...db,
-                              catalogItems: db.catalogItems.filter((c) => c.id !== cat.id),
-                            },
-                            'تم حذف الصنف من الكتالوج'
-                          )
-                        }
-                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
-                        title="حذف"
+                        onClick={() => setIsAddingNewPreset(false)}
+                        className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        إلغاء
                       </button>
                     </div>
                   </div>
-                ))}
+                )}
+
+                {/* Formations List */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Featured Default Formation */}
+                  <div className="bg-white border-2 border-sky-600 rounded-2xl p-5 shadow-2xs space-y-3.5 relative overflow-hidden flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 text-[10px] font-black text-amber-900 bg-amber-100 border border-amber-300 rounded-md shadow-2xs">
+                              التشكيل الافتراضي المعتمد
+                            </span>
+                            {isOfficialDefaultCommitteeActive && (
+                              <span className="px-2 py-0.5 text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-300 rounded-md flex items-center gap-1">
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                مطبق حالياً بالمحرر
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="text-base font-black text-slate-900 mt-1">
+                            اللجنة الثلاثية الرسمية الدائمة (غزال - ابوسمرة - زينهم)
+                          </h3>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        التشكيل الرسمي المعتمد لمنطقة مياه دسوق لفحص واستلام العهد الشخصية والمستديمة وأذون المناقلة
+                      </p>
+
+                      <div className="space-y-1.5 pt-1">
+                        <div className="p-2 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs">
+                          <span className="font-bold text-slate-900">
+                            1. السيد الأستاذ / علي عبداللطيف غزال
+                          </span>
+                          <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                            رئيساً — مدير إدارة المخازن والعهد
+                          </span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs">
+                          <span className="font-bold text-slate-900">
+                            2. السيد الأستاذ / محمد مسعود ابوسمرة
+                          </span>
+                          <span className="text-[11px] font-bold text-sky-800 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200">
+                            عضواً — مراقب عهدة ومخازن رئيسي
+                          </span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs">
+                          <span className="font-bold text-slate-900">
+                            3. السيد الأستاذ / محمود عبداللطيف زينهم
+                          </span>
+                          <span className="text-[11px] font-bold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+                            عضواً — رئيس قسم المراجعة المالية والمخزنية
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleApplyOfficialDefaultCommittee();
+                          setActiveTab('editor');
+                        }}
+                        className="flex-1 py-2 px-3 text-xs font-black text-white bg-sky-800 hover:bg-sky-900 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <span>⚡ تطبيق على المحضر المفتوح حالياً</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleCreateNewReport('receipt');
+                          setActiveTab('editor');
+                        }}
+                        className="py-2 px-3 text-xs font-bold text-sky-900 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>فتح محضر جديد بهذا التشكيل</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* All other Presets */}
+                  {db.committeePresets.map((preset) => {
+                    const isPresetActive =
+                      currentReport.committeeMembers.length === preset.members.length &&
+                      preset.members.every(
+                        (pm, i) =>
+                          currentReport.committeeMembers[i]?.name?.trim() === pm.name?.trim()
+                      );
+                    return (
+                      <div
+                        key={preset.id}
+                        className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-3.5 flex flex-col justify-between hover:border-slate-300 transition-all"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 text-[10px] font-bold text-slate-700 bg-slate-100 border border-slate-200 rounded-md">
+                                  قالب تشكيل ({preset.members.length} أعضاء)
+                                </span>
+                                {isPresetActive && (
+                                  <span className="px-2 py-0.5 text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-300 rounded-md flex items-center gap-1">
+                                    <Check className="w-3 h-3 text-emerald-600" />
+                                    مطبق حالياً بالمحرر
+                                  </span>
+                                )}
+                              </div>
+                              <h3 className="text-base font-black text-slate-900 mt-1">
+                                {preset.presetName}
+                              </h3>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCommitteePreset(preset.id)}
+                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                              title="حذف هذا القالب"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {preset.description && (
+                            <p className="text-xs text-slate-500">{preset.description}</p>
+                          )}
+
+                          <div className="space-y-1.5 pt-1">
+                            {preset.members.map((m, i) => (
+                              <div
+                                key={m.id || i}
+                                className="p-2 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs"
+                              >
+                                <span className="font-bold text-slate-900 truncate">
+                                  {i + 1}. {m.prefix} {m.name}
+                                </span>
+                                <span className="text-[11px] font-semibold text-sky-800 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200 shrink-0">
+                                  {m.committeeRole} {m.jobTitle ? `— ${m.jobTitle}` : ''}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={() => handleApplyPresetToCurrentReport(preset)}
+                            className="flex-1 py-2 px-3 text-xs font-bold text-white bg-sky-800 hover:bg-sky-900 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                          >
+                            <span>⚡ تطبيق على المحضر المفتوح حالياً</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCreateReportWithPreset(preset)}
+                            className="py-2 px-3 text-xs font-bold text-sky-900 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>فتح محضر جديد بهذا التشكيل</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Sub-tab 2: Committee Members Directory */}
+            {committeesActiveView === 'members' && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div className="lg:col-span-5 bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-2xs">
+                  <div className="border-b border-slate-100 pb-3">
+                    <h2 className="text-base font-bold text-slate-900">
+                      تسجيل عضو لجنة جديد بالدليل
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      أضف بيانات العضو والصفة الوظيفية ليكون متاحاً لجميع اللجان والمحاضر
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        اللقب بالديباجة
+                      </label>
+                      <input
+                        type="text"
+                        list="prefixes-list"
+                        value={newCommitteeMember.prefix}
+                        onChange={(e) =>
+                          setNewCommitteeMember({ ...newCommitteeMember, prefix: e.target.value })
+                        }
+                        placeholder="السيد الأستاذ /"
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-sky-700 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        اسم عضو اللجنة *
+                      </label>
+                      <input
+                        type="text"
+                        value={newCommitteeMember.name}
+                        onChange={(e) =>
+                          setNewCommitteeMember({ ...newCommitteeMember, name: e.target.value })
+                        }
+                        placeholder="الاسم الرباعي للعضو..."
+                        className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-sky-700 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        الصفة الوظيفية الرسمية
+                      </label>
+                      <input
+                        type="text"
+                        value={newCommitteeMember.jobTitle}
+                        onChange={(e) =>
+                          setNewCommitteeMember({ ...newCommitteeMember, jobTitle: e.target.value })
+                        }
+                        placeholder="مثال: مدير إدارة المخازن والعهد"
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-sky-700 focus:outline-none"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          الدور الافتراضي باللجنة
+                        </label>
+                        <input
+                          type="text"
+                          list="committee-roles-list"
+                          value={newCommitteeMember.defaultCommitteeRole}
+                          onChange={(e) =>
+                            setNewCommitteeMember({
+                              ...newCommitteeMember,
+                              defaultCommitteeRole: e.target.value,
+                            })
+                          }
+                          placeholder="رئيسا / عضوا"
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-sky-700 focus:outline-none text-center"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          الإدارة التابع لها
+                        </label>
+                        <input
+                          type="text"
+                          value={newCommitteeMember.departmentName}
+                          onChange={(e) =>
+                            setNewCommitteeMember({
+                              ...newCommitteeMember,
+                              departmentName: e.target.value,
+                            })
+                          }
+                          placeholder="منطقة مياه دسوق"
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-sky-700 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!newCommitteeMember.name.trim()) return;
+                        const cm: CommitteeMemberRecord = {
+                          ...newCommitteeMember,
+                          id: `cm-db-${Date.now()}`,
+                          name: newCommitteeMember.name.trim(),
+                        };
+                        await syncDatabase(
+                          { ...db, committeeMembers: [cm, ...db.committeeMembers] },
+                          `تم حفظ عضو اللجنة "${cm.name}" في قاعدة البيانات`
+                        );
+                        setNewCommitteeMember({
+                          prefix: 'السيد الأستاذ /',
+                          name: '',
+                          jobTitle: '',
+                          defaultCommitteeRole: 'عضوا',
+                          departmentName: 'منطقة مياه دسوق',
+                        });
+                      }}
+                      className="w-full py-2.5 text-xs font-bold text-white bg-sky-800 hover:bg-sky-900 rounded-xl shadow-xs transition-colors"
+                    >
+                      حفظ العضو في الدليل
+                    </button>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div>
+                      <h2 className="text-base font-bold text-slate-900">
+                        سجل أعضاء اللجان المعتمدين ({db.committeeMembers.length})
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        يمكنك إدراج أي عضو مباشرة في محضر الاستلام المفتوح الآن
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl max-h-[520px] overflow-y-auto">
+                    {db.committeeMembers.map((cm) => (
+                      <div
+                        key={cm.id}
+                        className="p-3.5 hover:bg-slate-50 flex flex-wrap items-center justify-between gap-2 transition-colors"
+                      >
+                        <div>
+                          <div className="text-xs font-black text-slate-900">
+                            {cm.prefix} {cm.name}
+                          </div>
+                          <div className="text-[11px] text-slate-600 mt-0.5">
+                            الصفة الوظيفية: {cm.jobTitle || '—'} · الدور: ({cm.defaultCommitteeRole})
+                          </div>
+                          {cm.departmentName && (
+                            <div className="text-[10px] text-slate-400">
+                              الإدارة: {cm.departmentName}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!currentReport) return;
+                              const newMember: CommitteeMemberEntry = {
+                                id: `cm-added-${Date.now()}`,
+                                prefix: cm.prefix || 'السيد الأستاذ /',
+                                name: cm.name,
+                                jobTitle: cm.jobTitle,
+                                committeeRole: cm.defaultCommitteeRole || 'عضوا',
+                                department: cm.departmentName,
+                              };
+                              setCurrentReport({
+                                ...currentReport,
+                                committeeMembers: [...currentReport.committeeMembers, newMember],
+                              });
+                              setActiveTab('editor');
+                              showToast(`تم إدراج "${cm.name}" في تشكيل المحضر الحالي`);
+                            }}
+                            className="px-2.5 py-1 text-xs font-bold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition-colors flex items-center gap-1"
+                            title="إدراج هذا العضو في المحضر المفتوح حالياً"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>إدراج بالمحضر</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCommitteeMember({ ...cm });
+                              setIsEditCommitteeMemberModalOpen(true);
+                            }}
+                            className="px-2 py-1 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-300 flex items-center gap-1 shadow-2xs transition-colors"
+                            title="تعديل بيانات العضو"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-amber-700" />
+                            <span>تعديل</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              syncDatabase(
+                                {
+                                  ...db,
+                                  committeeMembers: db.committeeMembers.filter((x) => x.id !== cm.id),
+                                },
+                                'تم حذف العضو من الدليل'
+                              )
+                            }
+                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg"
+                            title="حذف"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Sub-tab 3: Catalog Items */}
+            {committeesActiveView === 'catalog' && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div className="lg:col-span-5 bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-2xs">
+                  <div className="border-b border-slate-100 pb-3">
+                    <h2 className="text-base font-bold text-slate-900">
+                      إضافة صنف جديد للكتالوج
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      تسجيل بيانات صنف عهدة متكرر لتسهيل إدراجه بنقرة واحدة
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        اسم الصنف وبياناته بالتفصيل *
+                      </label>
+                      <input
+                        type="text"
+                        value={newCatalogItem.itemName}
+                        onChange={(e) =>
+                          setNewCatalogItem({ ...newCatalogItem, itemName: e.target.value })
+                        }
+                        placeholder="مثال: ماكينة شحن فوري موديل (A960)..."
+                        className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-sky-700 focus:outline-none"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          الوحدة الافتراضية
+                        </label>
+                        <input
+                          type="text"
+                          list="units-list"
+                          value={newCatalogItem.defaultUnit}
+                          onChange={(e) =>
+                            setNewCatalogItem({ ...newCatalogItem, defaultUnit: e.target.value })
+                          }
+                          placeholder="عدد"
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-sky-700 focus:outline-none text-center"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          التصنيف
+                        </label>
+                        <input
+                          type="text"
+                          value={newCatalogItem.category}
+                          onChange={(e) =>
+                            setNewCatalogItem({ ...newCatalogItem, category: e.target.value })
+                          }
+                          placeholder="أجهزة / مهمات..."
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-sky-700 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        الملاحظات والحالة الافتراضية
+                      </label>
+                      <input
+                        type="text"
+                        value={newCatalogItem.defaultNotes}
+                        onChange={(e) =>
+                          setNewCatalogItem({ ...newCatalogItem, defaultNotes: e.target.value })
+                        }
+                        placeholder="جديد وصالح للعمل..."
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-sky-700 focus:outline-none"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!newCatalogItem.itemName.trim()) return;
+                        const item: CatalogItemRecord = {
+                          ...newCatalogItem,
+                          id: `cat-${Date.now()}`,
+                          itemName: newCatalogItem.itemName.trim(),
+                        };
+                        await syncDatabase(
+                          { ...db, catalogItems: [item, ...db.catalogItems] },
+                          'تم حفظ الصنف بالكتالوج'
+                        );
+                        setNewCatalogItem({
+                          itemName: '',
+                          defaultUnit: 'عدد',
+                          category: 'مهمات تشغيل وصيانة',
+                          defaultNotes: 'جديد وصالح للعمل',
+                        });
+                      }}
+                      className="w-full py-2.5 text-xs font-bold text-white bg-sky-800 hover:bg-sky-900 rounded-xl shadow-xs transition-colors"
+                    >
+                      حفظ الصنف بالكتالوج
+                    </button>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div>
+                      <h2 className="text-base font-bold text-slate-900">
+                        كتالوج أصناف العهد المتكررة ({db.catalogItems.length})
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        يمكنك إدراج أي صنف مباشرة في جدول المحضر المفتوح الآن
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl max-h-[520px] overflow-y-auto">
+                    {db.catalogItems.map((cat) => (
+                      <div
+                        key={cat.id}
+                        className="p-3.5 hover:bg-slate-50 flex flex-wrap items-center justify-between gap-2 transition-colors"
+                      >
+                        <div className="max-w-md">
+                          <div className="text-xs font-bold text-slate-900">{cat.itemName}</div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            الوحدة: {cat.defaultUnit} · الملاحظات: {cat.defaultNotes || '—'}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!currentReport) return;
+                              const newItem: CustodyItem = {
+                                id: `item-${Date.now()}-${currentReport.items.length + 1}`,
+                                itemName: cat.itemName,
+                                unit: cat.defaultUnit || 'عدد',
+                                quantity: 1,
+                                tafqeet: numberToArabicTafqeet(1),
+                                notes: cat.defaultNotes || 'جديد وصالح للعمل',
+                              };
+                              setCurrentReport({
+                                ...currentReport,
+                                items: [...currentReport.items, newItem],
+                              });
+                              setActiveTab('editor');
+                              showToast(`تم إدراج الصنف "${cat.itemName.slice(0, 30)}..." في المحضر الحالي`);
+                            }}
+                            className="px-2.5 py-1 text-xs font-bold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition-colors flex items-center gap-1"
+                            title="إدراج هذا الصنف في جدول المحضر المفتوح حالياً"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>إدراج بالمحضر</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCatalogItem({ ...cat });
+                              setIsEditCatalogItemModalOpen(true);
+                            }}
+                            className="px-2 py-1 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-300 flex items-center gap-1 shadow-2xs transition-colors"
+                            title="تعديل بيانات الصنف"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-amber-700" />
+                            <span>تعديل</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              syncDatabase(
+                                {
+                                  ...db,
+                                  catalogItems: db.catalogItems.filter((c) => c.id !== cat.id),
+                                },
+                                'تم حذف الصنف من الكتالوج'
+                              )
+                            }
+                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg"
+                            title="حذف"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* ================= MODAL: EDIT COMMITTEE MEMBER ================= */}
             {isEditCommitteeMemberModalOpen && editingCommitteeMember && (

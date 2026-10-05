@@ -12,7 +12,7 @@ interface PrintableReceiptSheetProps {
   fontSizeScale?: 'compact' | 'standard' | 'spacious';
 }
 
-export const PrintableReceiptSheet: React.FC<PrintableReceiptSheetProps> = ({
+export const PrintableReceiptSheet: React.FC<PrintableReceiptSheetProps> = React.memo(({
   report,
   settings,
   showReportNumberBadge = true,
@@ -563,4 +563,4 @@ export const PrintableReceiptSheet: React.FC<PrintableReceiptSheetProps> = ({
       </div>
     </div>
   );
-};
+});

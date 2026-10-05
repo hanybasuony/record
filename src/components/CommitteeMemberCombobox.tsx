@@ -61,7 +61,7 @@ interface CommitteeMemberComboboxProps {
   placeholder?: string;
 }
 
-export const CommitteeMemberCombobox: React.FC<CommitteeMemberComboboxProps> = ({
+export const CommitteeMemberCombobox: React.FC<CommitteeMemberComboboxProps> = React.memo(({
   memberIndex,
   member,
   registeredMembers,
@@ -207,7 +207,7 @@ export const CommitteeMemberCombobox: React.FC<CommitteeMemberComboboxProps> = (
     <div ref={containerRef} className="relative w-full">
       {/* Input container with professional styling */}
       <div
-        className={`flex items-center bg-white border rounded-lg transition-all shadow-2xs ${
+        className={`flex items-center bg-white border rounded-lg transition-all shadow-2xs h-10 px-2 ${
           isOpen
             ? 'border-sky-600 ring-2 ring-sky-100'
             : matchedMember
@@ -216,7 +216,7 @@ export const CommitteeMemberCombobox: React.FC<CommitteeMemberComboboxProps> = (
         }`}
       >
         {/* Left Indicator/Avatar icon */}
-        <div className="pr-2.5 pl-1.5 flex items-center justify-center text-slate-400">
+        <div className="pr-1 pl-1.5 flex items-center justify-center text-slate-400">
           {matchedMember?.isOfficialDefault ? (
             <span
               title={`عضو معتمد رسمي (عضو ${matchedMember.officialSlot})`}
@@ -235,19 +235,13 @@ export const CommitteeMemberCombobox: React.FC<CommitteeMemberComboboxProps> = (
         <input
           ref={inputRef}
           type="text"
-          value={isOpen && searchQuery !== '' ? searchQuery : member.name}
+          value={member.name}
           onChange={(e) => {
             const val = e.target.value;
-            setSearchQuery(val);
             onUpdateName(val);
-            if (!isOpen) setIsOpen(true);
-          }}
-          onFocus={() => {
-            setSearchQuery('');
-            setIsOpen(true);
           }}
           placeholder={placeholder}
-          className="flex-1 py-1.5 px-1 text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none bg-transparent"
+          className="flex-1 py-2 px-1 text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none bg-transparent"
         />
 
         {/* Clear Button */}
@@ -277,7 +271,7 @@ export const CommitteeMemberCombobox: React.FC<CommitteeMemberComboboxProps> = (
               inputRef.current?.focus();
             }
           }}
-          className="p-1.5 pl-2 text-slate-400 hover:text-sky-700 transition-colors"
+          className="p-1.5 pl-1 text-slate-400 hover:text-sky-700 transition-colors"
           title="عرض قائمة أعضاء اللجنة"
         >
           <ChevronDown
@@ -290,7 +284,7 @@ export const CommitteeMemberCombobox: React.FC<CommitteeMemberComboboxProps> = (
 
       {/* Floating Combobox Menu */}
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-full min-w-[340px] max-w-[420px] bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden divide-y divide-slate-100 animate-in fade-in-50 zoom-in-95 duration-100 text-right">
+        <div className="absolute z-50 mt-1 right-0 w-full min-w-[300px] max-w-[440px] bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden divide-y divide-slate-100 animate-in fade-in-50 zoom-in-95 duration-100 text-right">
           {/* Header with Slot Default Recommendation */}
           {slotDefault && (
             <div className="bg-gradient-to-r from-sky-50 to-indigo-50 p-2.5 border-b border-sky-100">
@@ -486,4 +480,4 @@ export const CommitteeMemberCombobox: React.FC<CommitteeMemberComboboxProps> = (
       )}
     </div>
   );
-};
+});
